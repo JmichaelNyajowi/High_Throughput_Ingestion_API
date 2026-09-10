@@ -1,0 +1,717 @@
+openapi: 3.1.0
+info:
+  title: Telemetry Operations API
+  version: 1.0.0
+  description: |
+    Versioned contract for device telemetry admission and operator monitoring reads.
+    A 202 Accepted response confirms bounded in-memory admission only; it is not a
+    durable PostgreSQL-write acknowledgement.
+servers:
+  - url: https://telemetry.example.internal
+    description: Internal deployment address; replace for each environment.
+tags:
+  - name: Ingestion
+  - name: Fleet
+  - name: History
+  - name: Operations
+paths:
+  /v1/telemetry/batches:
+    post:
+      tags: [Ingestion]
+      operationId: admitTelemetryBatch
+      summary: Validate and admit one device telemetry batch
+      description: |
+        Authenticates one device, validates the entire batch, charges one rate-limit
+        token per event, and enqueues it. The request body must be no larger than 1 MB.
+        A batch is admitted atomically: no event is enqueued when any event is invalid,
+        unauthorized, rate limited, or cannot enter the bounded queue.
+      security:
+        - DeviceAPIKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TelemetryBatch'
+      responses:
+        '202':
+          $ref: '#/components/responses/TelemetryBatchAccepted'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /v1/live/fleet:
+    get:
+      tags: [Fleet]
+      operationId: getFleetLiveSnapshot
+      summary: Read the Redis-derived live fleet snapshot
+      description: |
+        Reads live aggregate state from Redis only. When Redis is unavailable, a
+        degraded response represents paused live aggregates and must never cause a
+        PostgreSQL fallback query or dashboard auto-refresh of historical data.
+      security:
+        - OperatorBasicAuth: []
+      responses:
+        '200':
+          $ref: '#/components/responses/FleetSnapshot'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /v1/live/devices/{deviceId}:
+    get:
+      tags: [Fleet]
+      operationId: getDeviceLiveSnapshot
+      summary: Read one Redis-derived device snapshot
+      description: |
+        Reads live aggregate state from Redis only. A degraded mode identifies that
+        current live aggregates are paused rather than silently falling back to
+        PostgreSQL.
+      security:
+        - OperatorBasicAuth: []
+      parameters:
+        - $ref: '#/components/parameters/DeviceID'
+      responses:
+        '200':
+          $ref: '#/components/responses/DeviceSnapshot'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /v1/history/devices/{deviceId}:
+    get:
+      tags: [History]
+      operationId: getDeviceHistory
+      summary: Run a bounded manual raw-event history query
+      description: |
+        This endpoint is for an explicit operator action only and must not be used by
+        dashboard polling. The server enforces its configured maximum time range in
+        addition to the required, bounded result limit.
+      security:
+        - OperatorBasicAuth: []
+      parameters:
+        - $ref: '#/components/parameters/DeviceID'
+        - $ref: '#/components/parameters/HistoryFrom'
+        - $ref: '#/components/parameters/HistoryTo'
+        - $ref: '#/components/parameters/HistoryLimit'
+        - $ref: '#/components/parameters/MeasurementType'
+        - $ref: '#/components/parameters/HistoryCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/HistoryPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /healthz:
+    get:
+      tags: [Operations]
+      operationId: getLiveness
+      summary: Check process liveness
+      description: Available only on the internal Docker or monitoring network.
+      security: []
+      responses:
+        '200':
+          $ref: '#/components/responses/HealthStatus'
+  /readyz:
+    get:
+      tags: [Operations]
+      operationId: getReadiness
+      summary: Check admission readiness and dependency state
+      description: Available only on the internal Docker or monitoring network.
+      security: []
+      responses:
+        '200':
+          $ref: '#/components/responses/ReadinessStatus'
+        '503':
+          $ref: '#/components/responses/ReadinessUnavailable'
+  /metrics:
+    get:
+      tags: [Operations]
+      operationId: getMetrics
+      summary: Expose Prometheus metrics
+      description: Available only to Prometheus on the internal monitoring network.
+      security: []
+      responses:
+        '200':
+          $ref: '#/components/responses/PrometheusMetrics'
+components:
+  securitySchemes:
+    DeviceAPIKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: A seeded static device credential. It cannot authorize dashboard reads.
+    OperatorBasicAuth:
+      type: http
+      scheme: basic
+      description: Enforced by Caddy together with the private-network access policy.
+  parameters:
+    DeviceID:
+      name: deviceId
+      in: path
+      required: true
+      description: The external identifier of a device.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+    HistoryFrom:
+      name: from
+      in: query
+      required: true
+      description: Inclusive RFC 3339 UTC start time.
+      schema:
+        type: string
+        format: date-time
+        pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?Z$'
+    HistoryTo:
+      name: to
+      in: query
+      required: true
+      description: Exclusive RFC 3339 UTC end time. The server rejects ranges over its configured maximum.
+      schema:
+        type: string
+        format: date-time
+        pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?Z$'
+    HistoryLimit:
+      name: limit
+      in: query
+      required: true
+      description: Maximum number of raw events to return. The MVP maximum is 1,000 events; a limit is required to protect ingestion capacity.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 1000
+    MeasurementType:
+      name: measurement_type
+      in: query
+      required: false
+      description: Narrow results to one measurement type.
+      schema:
+        $ref: '#/components/schemas/MeasurementType'
+    HistoryCursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque cursor from the preceding page.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 512
+  headers:
+    RequestID:
+      description: Server-generated request identifier for support and correlation. Echo it when contacting operations.
+      required: true
+      schema:
+        type: string
+        format: uuid
+    RetryAfter:
+      description: Seconds to wait before retrying when the server can calculate a delay.
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+  responses:
+    TelemetryBatchAccepted:
+      description: Batch was admitted to the bounded in-memory queue; it is not a durable-write acknowledgement.
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AdmissionAccepted'
+    FleetSnapshot:
+      description: Current Redis-derived fleet snapshot or explicit degraded state.
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/FleetLiveSnapshot'
+    DeviceSnapshot:
+      description: Current Redis-derived device snapshot or explicit degraded state.
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/DeviceLiveSnapshot'
+    HistoryPage:
+      description: A bounded page of manually requested raw telemetry events.
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/HistoryPage'
+    HealthStatus:
+      description: Process is live.
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/HealthStatus'
+    ReadinessStatus:
+      description: Process is ready to admit work.
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ReadinessStatus'
+    ReadinessUnavailable:
+      description: Process is not ready to admit work.
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ReadinessStatus'
+    PrometheusMetrics:
+      description: Prometheus text exposition format.
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        text/plain; version=0.0.4:
+          schema:
+            type: string
+    BadRequest:
+      description: The request fails batch, field, range, unit, device-binding, or history-query validation.
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Unauthorized:
+      description: The supplied credential is missing or invalid.
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    PayloadTooLarge:
+      description: The request body exceeds 1 MB.
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    UnsupportedMediaType:
+      description: Content-Type is not application/json.
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    TooManyRequests:
+      description: The device token bucket does not have enough event tokens for this whole batch.
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+        Retry-After:
+          $ref: '#/components/headers/RetryAfter'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    NotFound:
+      description: The requested device does not exist or has no accessible live state.
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    ServiceUnavailable:
+      description: The service cannot safely accept or serve the request because a bounded dependency or capacity limit is unavailable.
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+  schemas:
+    TelemetryBatch:
+      type: object
+      additionalProperties: false
+      required: [events]
+      properties:
+        events:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items:
+            $ref: '#/components/schemas/TelemetryEvent'
+    TelemetryEvent:
+      oneOf:
+        - $ref: '#/components/schemas/TemperatureEvent'
+        - $ref: '#/components/schemas/VoltageEvent'
+        - $ref: '#/components/schemas/BatteryEvent'
+        - $ref: '#/components/schemas/PressureEvent'
+      discriminator:
+        propertyName: measurement_type
+        mapping:
+          temperature: '#/components/schemas/TemperatureEvent'
+          voltage: '#/components/schemas/VoltageEvent'
+          battery: '#/components/schemas/BatteryEvent'
+          pressure: '#/components/schemas/PressureEvent'
+    TemperatureEvent:
+      type: object
+      additionalProperties: false
+      required: [event_id, device_id, timestamp, measurement_type, value]
+      properties:
+        event_id:
+          $ref: '#/components/schemas/EventID'
+        device_id:
+          $ref: '#/components/schemas/DeviceID'
+        timestamp:
+          $ref: '#/components/schemas/EventTimestamp'
+        measurement_type:
+          type: string
+          enum: [temperature]
+        value:
+          type: number
+          format: double
+          minimum: -40
+          maximum: 125
+        unit:
+          type: string
+          enum: [C]
+          description: Optional. Omit to use the canonical C unit.
+    VoltageEvent:
+      type: object
+      additionalProperties: false
+      required: [event_id, device_id, timestamp, measurement_type, value]
+      properties:
+        event_id:
+          $ref: '#/components/schemas/EventID'
+        device_id:
+          $ref: '#/components/schemas/DeviceID'
+        timestamp:
+          $ref: '#/components/schemas/EventTimestamp'
+        measurement_type:
+          type: string
+          enum: [voltage]
+        value:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 48
+        unit:
+          type: string
+          enum: [V]
+          description: Optional. Omit to use the canonical V unit.
+    BatteryEvent:
+      type: object
+      additionalProperties: false
+      required: [event_id, device_id, timestamp, measurement_type, value]
+      properties:
+        event_id:
+          $ref: '#/components/schemas/EventID'
+        device_id:
+          $ref: '#/components/schemas/DeviceID'
+        timestamp:
+          $ref: '#/components/schemas/EventTimestamp'
+        measurement_type:
+          type: string
+          enum: [battery]
+        value:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+        unit:
+          type: string
+          enum: ['%']
+          description: Optional. Omit to use the canonical percent unit.
+    PressureEvent:
+      type: object
+      additionalProperties: false
+      required: [event_id, device_id, timestamp, measurement_type, value]
+      properties:
+        event_id:
+          $ref: '#/components/schemas/EventID'
+        device_id:
+          $ref: '#/components/schemas/DeviceID'
+        timestamp:
+          $ref: '#/components/schemas/EventTimestamp'
+        measurement_type:
+          type: string
+          enum: [pressure]
+        value:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1000
+        unit:
+          type: string
+          enum: [kPa]
+          description: Optional. Omit to use the canonical kPa unit.
+    EventID:
+      type: string
+      minLength: 1
+      maxLength: 128
+    DeviceID:
+      type: string
+      minLength: 1
+      maxLength: 128
+    EventTimestamp:
+      type: string
+      format: date-time
+      description: RFC 3339 timestamp in UTC.
+      pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?Z$'
+    MeasurementType:
+      type: string
+      enum: [temperature, voltage, battery, pressure]
+    AdmissionAccepted:
+      type: object
+      additionalProperties: false
+      required: [request_id, accepted_events, status]
+      properties:
+        request_id:
+          type: string
+          format: uuid
+        accepted_events:
+          type: integer
+          minimum: 1
+          maximum: 500
+        status:
+          type: string
+          enum: [accepted]
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [request_id, error]
+      properties:
+        request_id:
+          type: string
+          format: uuid
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [invalid_request, unauthorized, payload_too_large, unsupported_media_type, rate_limited, not_found, unavailable]
+            message:
+              type: string
+              minLength: 1
+            details:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required: [field, reason]
+                properties:
+                  field:
+                    type: string
+                  reason:
+                    type: string
+    ServiceMode:
+      type: string
+      enum: [live, degraded]
+    Freshness:
+      type: string
+      enum: [active, stale, unknown]
+    ThresholdStatus:
+      type: string
+      enum: [normal, warning, critical, unknown]
+    MeasurementAggregate:
+      type: object
+      additionalProperties: false
+      required: [measurement_type, unit, latest_value, latest_timestamp, count, sum, average, minimum, maximum, window_start, window_end, threshold_status, updated_at]
+      properties:
+        measurement_type:
+          $ref: '#/components/schemas/MeasurementType'
+        unit:
+          type: string
+          enum: [C, V, '%', kPa]
+        latest_value:
+          type: number
+          format: double
+        latest_timestamp:
+          type: string
+          format: date-time
+        count:
+          type: integer
+          minimum: 0
+        sum:
+          type: number
+          format: double
+        average:
+          type: number
+          format: double
+        minimum:
+          type: number
+          format: double
+        maximum:
+          type: number
+          format: double
+        window_start:
+          type: string
+          format: date-time
+        window_end:
+          type: string
+          format: date-time
+        threshold_status:
+          $ref: '#/components/schemas/ThresholdStatus'
+        updated_at:
+          type: string
+          format: date-time
+    FleetDeviceSummary:
+      type: object
+      additionalProperties: false
+      required: [device_id, freshness, last_processed_at, overall_status, measurements]
+      properties:
+        device_id:
+          $ref: '#/components/schemas/DeviceID'
+        freshness:
+          $ref: '#/components/schemas/Freshness'
+        last_processed_at:
+          type: string
+          format: date-time
+        overall_status:
+          $ref: '#/components/schemas/ThresholdStatus'
+        measurements:
+          type: array
+          items:
+            $ref: '#/components/schemas/MeasurementAggregate'
+    FleetLiveSnapshot:
+      type: object
+      additionalProperties: false
+      required: [mode, generated_at, summary, devices]
+      properties:
+        mode:
+          $ref: '#/components/schemas/ServiceMode'
+        generated_at:
+          type: string
+          format: date-time
+        summary:
+          type: object
+          additionalProperties: false
+          required: [critical, warning, stale, active]
+          properties:
+            critical:
+              type: integer
+              minimum: 0
+            warning:
+              type: integer
+              minimum: 0
+            stale:
+              type: integer
+              minimum: 0
+            active:
+              type: integer
+              minimum: 0
+        devices:
+          type: array
+          items:
+            $ref: '#/components/schemas/FleetDeviceSummary'
+    DeviceLiveSnapshot:
+      type: object
+      additionalProperties: false
+      required: [mode, generated_at, device]
+      properties:
+        mode:
+          $ref: '#/components/schemas/ServiceMode'
+        generated_at:
+          type: string
+          format: date-time
+        device:
+          $ref: '#/components/schemas/FleetDeviceSummary'
+    HistoryEvent:
+      type: object
+      additionalProperties: false
+      required: [event_id, device_id, measurement_type, value, unit, event_timestamp, received_at]
+      properties:
+        event_id:
+          $ref: '#/components/schemas/EventID'
+        device_id:
+          $ref: '#/components/schemas/DeviceID'
+        measurement_type:
+          $ref: '#/components/schemas/MeasurementType'
+        value:
+          type: number
+          format: double
+        unit:
+          type: string
+          enum: [C, V, '%', kPa]
+        event_timestamp:
+          type: string
+          format: date-time
+        received_at:
+          type: string
+          format: date-time
+    HistoryPage:
+      type: object
+      additionalProperties: false
+      required: [request_id, events, limit]
+      properties:
+        request_id:
+          type: string
+          format: uuid
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/HistoryEvent'
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 1000
+        next_cursor:
+          type: string
+          maxLength: 512
+    HealthStatus:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+    ReadinessStatus:
+      type: object
+      additionalProperties: false
+      required: [status, admission]
+      properties:
+        status:
+          type: string
+          enum: [ready, degraded, unavailable]
+        admission:
+          type: string
+          enum: [accepting, backpressured, paused]

@@ -40,3 +40,4 @@ Modules represent product concepts, not technical layers. A Go module exposes it
 - Admission p95 target: under 20 ms. Redis-backed read p95 target: under 5 ms.
 - Static device API keys use a key ID plus high-entropy secret, HMAC hash comparison, and TLS only.
 - Queue/retry memory is bounded. The system makes loss boundaries visible rather than claiming unsupported durability.
+- All application success and error responses use JSON and include `X-Request-ID`. `GET /metrics` is the deliberate exception: it returns Prometheus text exposition as `text/plain; version=0.0.4`, still with `X-Request-ID`, so Prometheus can scrape it correctly.

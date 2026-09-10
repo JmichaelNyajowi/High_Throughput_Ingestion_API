@@ -5,7 +5,7 @@ description: Audit implemented UI against written project design and accessibili
 
 # Critique
 
-Run after `/verify` for UI work. Read the ticket, implementation diff, `docs/design.md`, `docs/screens.md`, and `references.ui-rules.md` when applicable. Project rules take precedence over reference material.
+Run after `/verify` for UI work. Read `reference.PROJECT.md`, the ticket, implementation diff, `docs/DESIGN.md`, `docs/screens.md`, and `references.ui-rules.md`. `docs/DESIGN.md` takes precedence over reference material.
 
 Audit design tokens, hierarchy, component reuse, states, responsive behavior, focus management, keyboard interaction, ARIA semantics, contrast, error recovery, and lifecycle actions declared by the ticket. Produce a severity-ranked list where every finding identifies the written rule, affected location, and precise remedy.
 

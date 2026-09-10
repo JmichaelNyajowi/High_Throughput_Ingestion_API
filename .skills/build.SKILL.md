@@ -5,10 +5,12 @@ description: Implement one eligible ticket with the project’s documented test 
 
 # Build
 
-Read the selected `.work/` ticket, `CONTEXT.md`, `docs/architecture.md`, `docs/conventions.md`, `docs/setup.md` when present, relevant ADRs, and the existing module. Confirm its blockers are done and change `Status` to `in-progress`.
+Read `reference.PROJECT.md`, `.work/README.md`, the selected unblocked ticket, and every source named by the ticket’s acceptance criteria. At minimum read `CONTEXT.md`, `docs/prd.md`, `docs/architecture.md`, `docs/Architecture.md`, `docs/conventions.md`, and `docs/setup.md`. Confirm blockers are `done`, then set the ticket to `in-progress`.
 
-Use commands and project patterns documented in `docs/conventions.md`; never assume a package manager, framework, test runner, source layout, or port. For `logic (test-first)`, write executable failing tests from acceptance criteria before implementation. For plumbing, implement narrowly and add the tests the project convention requires. Respect documented module interfaces and do not access another module’s internals.
+Implement only stated scope, lifecycle, and failure behavior. Respect the module seams in `docs/architecture.md`. For `logic (test-first)`, write one executable failing behavior test from an acceptance criterion, observe failure, implement the minimum change, and repeat. For plumbing, add seam-level tests required by the ticket and conventions.
 
-Implement only the stated scope, including lifecycle and failure behavior. If UI changes, follow `docs/design.md`, `docs/screens.md`, and the UI rules; do not invent a screen or a reusable primitive without a design decision. Run the documented tests, lint, type checks, migration checks, and appropriate manual or browser verification. Record evidence in the ticket.
+Run the change-sensitive preflight in `reference.PROJECT.md` before quality commands: UI work must use `docs/DESIGN.md` and `docs/screens.md`; HTTP, authentication, metrics, health, or endpoint work must inspect `api/openapi.yaml`, `deploy/Caddyfile`, and `deploy/compose.yaml`; data or concurrency work must inspect `docs/database.md`. Do not create a lower-case `docs/design.md` or invent missing screen/component patterns.
 
-Open or prepare a pull request and leave the ticket `Status: in-review`. `/build` never merges its own work. Hand it to `/verify` when an interactive flow warrants runtime evidence, then to `/review` before merge.
+Run the exact relevant commands in `reference.PROJECT.md`. Record a build-gate trace mapping every acceptance criterion and binding rule to its source, implementation location, and repeatable proof. Add a regression test for each corrected review finding when testable. Do not set `in-review` while a trace discrepancy remains.
+
+Prepare a pull request without merging, leave the ticket `in-review`, and hand interactive work to `/verify` before `/review`.

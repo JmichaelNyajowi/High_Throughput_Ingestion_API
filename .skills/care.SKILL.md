@@ -5,7 +5,7 @@ description: Identify and rank architectural friction between delivery tranches,
 
 # Care
 
-Read `reference.MODULES.md`, `CONTEXT.md`, ADRs, architecture docs, recent changes, and relevant tests. Look for observed friction: unclear ownership, cross-module internal access, interfaces that expose little value, seams that cannot be tested, recurring defects, or excessive navigation across files to understand one concept.
+Read `reference.PROJECT.md`, `reference.MODULES.md`, `CONTEXT.md`, both architecture documents, recent changes, deployment configuration when relevant, and tests. Look for observed friction: unclear ownership, cross-module internal access, interfaces that expose little value, seams that cannot be tested, recurring defects, or excessive navigation across files to understand one concept.
 
 Write a dated report in the OS temporary directory, not the repository. For each candidate list the modules/files involved, observed problem, likely benefit, and confidence. Stop for the project owner to choose one; do not propose detailed interfaces for every candidate.
 

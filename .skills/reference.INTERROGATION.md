@@ -1,6 +1,6 @@
 # Interrogation
 
-How to interview the user. Shared by `/discovery`, `/plan`, `/design`, and `/care`.
+How to interview the user. Shared by `/discovery`, `/plan`, `/design`, and `/care`. Read `reference.PROJECT.md` first so questions do not repeat answers already present in this repository.
 
 The goal is a shared understanding neither of you had at the start. Not information extraction — decisions, stress-tested.
 

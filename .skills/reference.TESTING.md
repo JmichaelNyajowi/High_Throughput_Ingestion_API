@@ -1,5 +1,7 @@
 # Testing
 
+Read `reference.PROJECT.md` for this repository’s commands, runtime limitations, and named seams before applying these general rules.
+
 Test types, seams, and the test-first rules. Used by `/foundation`, `/build`, `/review`, and `/fix`.
 
 ## The three types
@@ -30,7 +32,7 @@ At real boundaries, design for mockability: pass dependencies in rather than con
 
 **A seam is where a test observes behaviour without reaching inside** — a module's interface.
 
-**Test only at confirmed seams.** They're decided in Planning and listed in `docs/architecture.md`. **No test is written at a seam that isn't on that list.** If a new seam seems necessary, stop and ask.
+**Test only at confirmed seams.** They are decided in `docs/architecture.md`; public HTTP behavior is observed through `api/openapi.yaml` and handlers. **No test is written at a seam that isn't on that list.** If a new seam seems necessary, stop and ask.
 
 Prefer existing seams. Prefer the highest seam available. Fewer is better.
 
@@ -126,3 +128,9 @@ It costs maybe 10–20% more within a ticket. It's cheaper overall for two reaso
 - **Typecheck continuously** — the cheapest real feedback available
 - **Run the tests you touched continuously**
 - **Run the full suite once, at the end**
+
+## Telemetry additions
+
+- For a logic ticket, preserve red/green evidence in the ticket verification record.
+- For a UI ticket, test every declared route, including malformed and unknown paths, plus keyboard/focus and named focusable regions.
+- For an HTTP or security ticket, test the public status, headers, content type, error shape, and negative path; inspect `deploy/Caddyfile` and `deploy/compose.yaml` whenever the contract makes an edge-access claim.

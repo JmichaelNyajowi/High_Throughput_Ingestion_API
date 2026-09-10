@@ -10,7 +10,7 @@ export function App({ initialPath }: { initialPath?: string }) {
   useEffect(() => { const syncPath = () => setPathname(window.location.pathname); window.addEventListener("popstate", syncPath); return () => window.removeEventListener("popstate", syncPath); }, []);
   const route = resolveRoute(pathname);
   const content = route.kind === "fleet" ? <FleetPendingPage /> : route.kind === "device" ? <DevicePendingPage deviceID={route.deviceID} /> : route.kind === "history" ? <HistoryPreQueryPage deviceID={route.deviceID} /> : <NotFoundPage />;
-  return <AppShell>{content}</AppShell>;
+  return <AppShell isFleet={route.kind === "fleet"}>{content}</AppShell>;
 }
 
 function NotFoundPage() { return <section className="recovery-state" aria-labelledby="not-found-title"><p className="eyebrow">Navigation recovery</p><h1 id="not-found-title">Page not found</h1><p>The destination is unavailable or no longer exists.</p><a className="button button--primary" href="/"><ArrowLeft aria-hidden="true" size={16} /> Return to fleet</a></section>; }

@@ -111,6 +111,7 @@ Each event requires:
 | Battery | % | 0.0 to 100.0 |
 | Pressure | kPa | 0.0 to 1000.0 |
 
+- `unit` is optional. When omitted, the API assigns the canonical wire unit for the measurement type (`C`, `V`, `%`, or `kPa`); when supplied, it must exactly match that canonical unit.
 - Store events whose event timestamp is more than 60 seconds behind system time, but exclude them from live Redis aggregation.
 
 ### 6.3 Rate limiting
@@ -177,6 +178,7 @@ Each event requires:
 - Poll live aggregate endpoints at a configurable interval.
 - Explicitly show loading, stale, unavailable, error, and degraded states.
 - Permit historical PostgreSQL reads only through an explicit user-initiated historical view, never through live UI auto-refresh.
+- Require each manual history query to include a result limit from 1 to 1,000 events. The API separately enforces its configured maximum time range.
 
 ### 6.9 Health and observability
 

@@ -8,7 +8,7 @@ A module is a cohesive unit that owns one business capability or system responsi
 
 ## Interface
 
-The deliberately small public contract a module offers to other modules: supported operations, inputs, outputs, invariants, and errors. Its implementation form is language-specific—for example, a Go package API, a TypeScript barrel export, a Python package boundary, or a service contract. `docs/conventions.md` must identify the project’s actual form.
+The deliberately small public contract a module offers to other modules: supported operations, inputs, outputs, invariants, and errors. In this repository, Go package APIs, TypeScript module `index.ts` exports, and `api/openapi.yaml` are the confirmed forms; `docs/architecture.md` identifies their ownership and seams.
 
 ## Boundary
 

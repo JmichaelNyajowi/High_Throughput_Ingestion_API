@@ -8,10 +8,10 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/example/telemetry/api/internal/platform/config"
 	"github.com/example/telemetry/api/internal/platform/httpserver"
+	"github.com/example/telemetry/api/internal/platform/runtime"
 )
 
 func main() {
@@ -21,13 +21,14 @@ func main() {
 		logger.Error("invalid configuration", "error", err)
 		os.Exit(1)
 	}
+	readiness := httpserver.NewReadiness()
 	server := &http.Server{
 		Addr:              cfg.ListenAddr,
-		Handler:           httpserver.NewHandler(),
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      15 * time.Second,
-		IdleTimeout:       60 * time.Second,
+		Handler:           httpserver.NewHandler(httpserver.Options{Logger: logger, Readiness: readiness}),
+		ReadHeaderTimeout: cfg.Server.ReadHeaderTimeout,
+		ReadTimeout:       cfg.Server.ReadTimeout,
+		WriteTimeout:      cfg.Server.WriteTimeout,
+		IdleTimeout:       cfg.Server.IdleTimeout,
 	}
 
 	go func() {
@@ -42,9 +43,9 @@ func main() {
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	<-stop
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer cancel()
-	if err := server.Shutdown(ctx); err != nil {
+	if err := runtime.New(server, readiness).Shutdown(ctx); err != nil {
 		logger.Error("graceful shutdown failed", "error", err)
 	}
 }

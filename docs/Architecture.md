@@ -214,7 +214,7 @@ This gives a five-minute sliding dashboard window at **one-second granularity**.
 
 ## 5. API structure
 
-The API contract is `api/openapi.yaml` using OpenAPI 3.1. All successful and error responses use JSON and include `X-Request-ID`.
+The API contract is `api/openapi.yaml` using OpenAPI 3.1. All successful and error responses use JSON and include `X-Request-ID`, **except `GET /metrics`**. That endpoint returns Prometheus text exposition as `text/plain; version=0.0.4` (and still includes `X-Request-ID`) because Prometheus scrapers require that wire format.
 
 ### 5.1 Endpoint map
 
@@ -282,7 +282,7 @@ Status semantics:
 
 Live-device responses include `last_processed_at`, `freshness` (`active`, `stale`, or `unknown`), `aggregate_window_start`, `aggregate_window_end`, `threshold_status`, and all aggregate values. The server computes stale when `now - last_processed_at > 60 seconds`.
 
-The historical endpoint requires `from`, `to`, and a bounded `limit`; enforce a maximum time range and page size in the API to prevent an operator request from becoming a table scan. It is intentionally excluded from TanStack Query's auto-refresh loop.
+The historical endpoint requires `from`, `to`, and a bounded `limit` from 1 to 1,000 events; enforce a configured maximum time range in the API to prevent an operator request from becoming a table scan. It is intentionally excluded from TanStack Query's auto-refresh loop.
 
 ## 6. Authentication flow
 

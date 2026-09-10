@@ -1,6 +1,6 @@
-# Project Skills Workflow
+# Telemetry Project Skills Workflow
 
-This directory is a portable, project-local workflow for agent-assisted software delivery. Copy the whole `skills/` directory into a new project, then keep project decisions in `CONTEXT.md` and `docs/` rather than baking them into the skills.
+This is the project-local workflow for agent-assisted delivery. Its codebase-specific paths and commands live in [`reference.PROJECT.md`](reference.PROJECT.md). A copy for another repository must update that map before use.
 
 The workflow assumes this flat file layout: invoke `discovery.SKILL.md` as `/discovery`, `plan.SKILL.md` as `/plan`, and so on. Links in this README intentionally point to files that exist in this directory.
 
@@ -20,9 +20,9 @@ Do not use `/adopt` merely because a project has planning documents. It is for p
 ## New-project flow
 
 1. Run `/discovery` when the input is raw stakeholder material. Skip it when the supplied product material is already adequate.
-2. Run `/plan` to produce or update `CONTEXT.md`, `docs/architecture.md`, `docs/scope.md`, `docs/conventions.md`, and `docs/release.md`.
+2. Run `/plan` to produce or update the canonical documents listed in [`reference.PROJECT.md`](reference.PROJECT.md).
 3. Run `/foundation` to make the documented stack runnable, testable, and safe to change.
-4. Run `/design` for products with a UI. It turns the agreed product and architecture into screen, component, state, and accessibility decisions.
+4. Run `/design` for products with a UI. It maintains `docs/DESIGN.md` and `docs/screens.md`.
 5. Run `/tickets` for only the next feature. It creates dependency-aware, standalone tickets in `.work/`.
 6. Run `/build` for an unblocked ticket. It implements, self-verifies, and prepares a pull request; it does not merge.
 7. Run `/review` in a fresh review context. Approval is required before a ticket is merged.
@@ -64,8 +64,8 @@ Every ticket uses the format in [`reference.TICKET-FORMAT.md`](reference.TICKET-
 
 1. Copy this whole `skills/` directory into `<project-root>/skills/`.
 2. Add a short `AGENTS.md` (or the project’s equivalent agent instruction file) that points to this README and the project’s canonical docs.
-3. Run the appropriate entry skill. Skills create missing, important documentation or structural folders when their outputs are determinable; they pause for user direction when the missing item needs a material product, security, or operational decision.
-4. Put stack-specific commands, paths, role names, deployment details, and examples in `docs/setup.md`, `docs/conventions.md`, `docs/design.md`, and `docs/release.md`. Do not edit generic skill files to encode one project’s stack.
+3. Update `reference.PROJECT.md` for the new repository before running an entry skill. Create missing, important documentation or structural folders only when their contents are determinable; pause when they require a material product, security, or operational decision.
+4. Keep stack-specific commands, paths, role names, deployment details, and examples in the canonical project documents, not in generic workflow prose.
 
 ## Workflow principles
 

@@ -9,4 +9,5 @@ test("resolves approved monitoring destinations", () => {
 
 test("returns a recovery state for unsupported destinations", () => {
   expect(resolveRoute("/settings")).toEqual({ kind: "not-found" });
+  expect(resolveRoute("/devices/%")).toEqual({ kind: "not-found" });
 });
