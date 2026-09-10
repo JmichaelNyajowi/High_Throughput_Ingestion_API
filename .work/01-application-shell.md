@@ -2,7 +2,7 @@
 
 **Type:** plumbing (test-after)
 **Blocked by:** None — Foundation bootstrap is complete.
-**Status:** planned
+**Status:** in-review
 
 ## What this delivers
 
@@ -35,6 +35,7 @@ This ticket creates no domain record.
 
 ## Verification
 
-- Run frontend formatting, type checking, linting, and relevant component tests.
-- Verify each Storybook story against `docs/DESIGN.md`, including desktop, mobile, keyboard-only, and reduced-motion behavior.
-- Run a browser check for default route, direct deep links, unknown route recovery, visible focus, and skip-link behavior.
+- [x] `npm run lint`, `npm run typecheck`, `npm run test`, and `npm run build` pass in `frontend/`.
+- [x] Storybook static build succeeds with Fleet pending, Device pending, History pre-query, and not-found stories; the a11y addon is enabled.
+- [x] Temporary Vite verification returned the SPA document for `/`, `/devices/gateway-17`, `/devices/gateway-17/history`, and `/missing`.
+- [ ] A browser service was unavailable in this session, so an independent reviewer must complete the visual keyboard/focus, reduced-motion, desktop, tablet, and mobile inspection before approval.

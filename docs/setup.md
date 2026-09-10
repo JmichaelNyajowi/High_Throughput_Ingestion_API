@@ -28,8 +28,10 @@ The bootstrap API exposes only `GET /healthz` and `GET /readyz`. Product endpoin
 | Go static checks | `(cd api && go vet ./...)` |
 | Go tests and race detector | `(cd api && go test -race ./...)` |
 | Frontend type check | `npm --prefix frontend run typecheck` |
+| Frontend lint | `npm --prefix frontend run lint` |
 | Frontend unit tests | `npm --prefix frontend run test` |
 | Frontend production build | `npm --prefix frontend run build` |
+| Storybook static build | `npm --prefix frontend run storybook:build` |
 | Compose validation | `docker compose -f deploy/compose.yaml --env-file .env config` |
 
 Run container-backed integration tests only on a Docker-capable host. Browser tests and k6 benchmarks are added with the relevant feature tickets.

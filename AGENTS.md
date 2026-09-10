@@ -1,6 +1,6 @@
 # Agent Instructions
 
-Read [skills/README.md](skills/README.md) before selecting a workflow skill.
+Read [.skills/README.md](.skills/README.md) before selecting a workflow skill.
 
 Canonical project decisions live in:
 
