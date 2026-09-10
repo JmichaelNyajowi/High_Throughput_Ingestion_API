@@ -130,30 +130,16 @@ broken (not a redesign) unless the client specifically needs field/mobile
 use. Tables may scroll horizontally on small screens rather than
 transforming into cards.
 
-## Tooling defaults
+## Tooling guidance
 
-- **Components: shadcn/ui.** Copy-in (source lands in the repo, fully
-  editable — critical for agent-driven work), built on Radix (correct
-  accessibility/keyboard/focus behaviour) + Tailwind. Never build primitive
-  components (dropdowns, dialogs, comboboxes) from scratch — the
-  accessibility surface is large and easy to get subtly wrong.
-- **Tables: TanStack Table** for logic (sorting/filtering/grouping/
-  pagination/selection), **TanStack Virtual** for long lists, **TanStack
-  Query** for server state + optimistic updates.
-- **Icons: Lucide** — one set, one weight. 16px inline with text, 20px
-  standalone. Icon-only buttons need both a tooltip and an `aria-label`.
-- **Forms: React Hook Form + Zod**, via shadcn's Form wrapper.
-- **Charts: shadcn chart components (Recharts)**; reach for ECharts only at
-  serious data volume.
-- **Component gallery / catalogue: Storybook.** Every approved component
-  and screen composition exists as a story in-repo. This is what an agent
-  reads to see what already exists before building something new, and it's
-  the durable, in-repo source of truth for approved designs — never a
-  separate design tool.
-- **Fonts:** Inter as the default choice unless a specific alternative is
-  chosen; self-host via Fontsource, not a Google Fonts CDN request.
-- **Accessibility tooling:** `eslint-plugin-jsx-a11y` wired into lint,
-  axe DevTools / Lighthouse for spot checks.
+Choose tooling in Planning and record it in `docs/architecture.md` and
+`docs/conventions.md`; this reference must not override a project's stack.
+Use mature, accessible primitives instead of hand-building complex controls
+such as dialogs, menus, comboboxes, and date pickers. Use one icon system,
+one component catalogue or documented equivalent, and automated accessibility
+checks appropriate to the selected platform. For a React web project, tools
+such as shadcn/Radix, TanStack, React Hook Form with Zod, Storybook, and axe
+are sensible options—not workflow requirements.
 
 ## Design tokens
 
@@ -171,7 +157,8 @@ heights), radius (small/medium/large/full, scaled to element size), shadow
 never flat cards), border, z-index (named layers, not magic numbers),
 motion (named durations/easings).
 
-**The enforcement rule, verbatim, belongs in `CLAUDE.md`:** all spacing,
+**The enforcement rule belongs in `AGENTS.md` (or the project’s agent
+instruction file):** all spacing,
 colour, radius, and typography values must come from theme tokens. Never
 arbitrary Tailwind values or raw hex in components. If a needed value
 doesn't exist in the theme, stop and ask rather than inventing one.

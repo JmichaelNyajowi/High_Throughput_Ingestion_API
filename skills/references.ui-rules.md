@@ -7,7 +7,8 @@ These are **rules already decided**, not aesthetic opinions. Every one is
 objectively checkable. The premise: what makes UI bad is mostly
 arbitrariness, and arbitrariness is detectable.
 
-Project-specific rules in `docs/design.md` and `CLAUDE.md` **override**
+Project-specific rules in `docs/design.md` and `AGENTS.md` (or the project's
+agent instruction file) **override**
 anything here.
 
 ## Tokens and values

@@ -41,5 +41,8 @@
 ## Change and release conventions
 
 - Work one planned `.work` ticket at a time. A ticket is done only after independent review.
+- Every `.work` ticket uses the project ticket standard: `Type`, `Blocked by`, `Status`, `What this delivers`, `Lifecycle`, `Acceptance criteria`, `Out of scope`, and `Verification`.
+- Any ticket that creates or changes a record type must explicitly decide its create, read, update, delete, and undo behavior. `Not applicable` is valid only when the ticket creates no domain record.
+- Acceptance criteria describe observable user or system behavior, not implementation steps. Every ticket declares the work it deliberately excludes.
 - Use backward-compatible expand/contract migrations. Never drop/rename a live schema dependency in the same deployment that stops using it.
 - Do not create missing feature scope implicitly. Use the add/fix workflow when a request expands the approved scope.

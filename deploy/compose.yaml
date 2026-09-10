@@ -1,0 +1,67 @@
+services:
+  caddy:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      CADDY_SITE_ADDRESS: ${CADDY_SITE_ADDRESS:?set a local bind address or production domain}
+      CADDY_BASIC_AUTH_HASH: ${CADDY_BASIC_AUTH_HASH:?set a Caddy password hash}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [edge, internal]
+
+  api:
+    build:
+      context: ../api
+    environment:
+      APP_ENV: production
+      API_LISTEN_ADDR: :8080
+      POSTGRES_URL: postgresql://${POSTGRES_USER:?set database user}:${POSTGRES_PASSWORD:?set database password}@postgres:5432/${POSTGRES_DB:?set database name}?sslmode=disable
+      REDIS_URL: redis://:${REDIS_PASSWORD:?set a Redis password}@redis:6379/0
+      TELEMETRY_API_KEY_PEPPER: ${TELEMETRY_API_KEY_PEPPER:?set an API-key pepper}
+    expose: ["8080"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks: [internal]
+
+  postgres:
+    image: postgres:17.3-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set database name}
+      POSTGRES_USER: ${POSTGRES_USER:?set database user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set database password}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [internal]
+
+  redis:
+    image: redis:7.4.2-alpine
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?set a Redis password}", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set a Redis password}
+    volumes:
+      - redis-data:/data
+    networks: [internal]
+
+networks:
+  edge: {}
+  internal:
+    internal: true
+
+volumes:
+  postgres-data: {}
+  redis-data: {}
