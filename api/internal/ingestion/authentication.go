@@ -41,8 +41,12 @@ func (authenticator DeviceAuthenticator) Middleware(next http.Handler) http.Hand
 			return
 		}
 
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), authorizedDeviceContextKey{}, device)))
+		next.ServeHTTP(w, r.WithContext(withAuthorizedDevice(r.Context(), device)))
 	})
+}
+
+func withAuthorizedDevice(ctx context.Context, device credentials.AuthorizedDevice) context.Context {
+	return context.WithValue(ctx, authorizedDeviceContextKey{}, device)
 }
 
 // AuthorizedDeviceFromContext returns the device identity established by the
