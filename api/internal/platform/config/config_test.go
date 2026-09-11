@@ -78,3 +78,29 @@ func TestLoadUsesValidatedTimeoutOverrides(t *testing.T) {
 		t.Fatalf("timeout overrides were not applied: %#v", config)
 	}
 }
+
+func TestLoadParsesDeviceCredentialSeeds(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("TELEMETRY_DEVICE_SEEDS", `[{"device_id":"edge-01","name":"Boiler inlet","device_type":"gateway","api_key":"tk_edge-01_not-a-real-key"}]`)
+
+	config, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if len(config.DeviceSeeds) != 1 {
+		t.Fatalf("DeviceSeeds length = %d, want 1", len(config.DeviceSeeds))
+	}
+	seed := config.DeviceSeeds[0]
+	if seed.DeviceID != "edge-01" || seed.Name != "Boiler inlet" || seed.DeviceType != "gateway" || seed.APIKey != "tk_edge-01_not-a-real-key" {
+		t.Fatalf("DeviceSeeds[0] = %#v, want parsed seed", seed)
+	}
+}
+
+func TestLoadRejectsMalformedDeviceCredentialSeedConfiguration(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("TELEMETRY_DEVICE_SEEDS", `{not-json}`)
+
+	if _, err := Load(); err == nil {
+		t.Fatal("Load() error = nil, want seed configuration error")
+	}
+}

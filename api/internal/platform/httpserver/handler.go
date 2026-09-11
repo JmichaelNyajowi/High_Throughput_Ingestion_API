@@ -169,9 +169,15 @@ func (w *responseRecorder) Status() int {
 }
 
 func writeSafeError(w http.ResponseWriter, r *http.Request, status int) {
+	WriteError(w, r, status, "unavailable", "Service temporarily unavailable")
+}
+
+// WriteError writes the published JSON error envelope without exposing internal
+// error values. Callers must choose a contract-approved code and safe message.
+func WriteError(w http.ResponseWriter, r *http.Request, status int, code, message string) {
 	payload := errorEnvelope{RequestID: RequestID(r.Context())}
-	payload.Error.Code = "unavailable"
-	payload.Error.Message = "Service temporarily unavailable"
+	payload.Error.Code = code
+	payload.Error.Message = message
 	writeJSON(w, status, payload)
 }
 

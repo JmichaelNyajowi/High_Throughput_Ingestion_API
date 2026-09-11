@@ -14,9 +14,11 @@ Docker is required for the full local topology and Testcontainers tests. It is n
 1. Copy `.env.example` to `.env` and replace every placeholder only in your local secret store or untracked environment file.
 2. Install frontend dependencies: `npm --prefix frontend ci`.
 3. Start dependencies: `docker compose -f deploy/compose.yaml --env-file .env up -d postgres redis`.
-4. Apply migrations: `./scripts/migrate-up.sh`.
-5. Run the API: `go run ./api/cmd/api`.
-6. Run the frontend: `npm --prefix frontend run dev`.
+4. Set `TELEMETRY_DEVICE_SEEDS` in the untracked `.env` to the JSON array of device metadata and static keys. Each entry requires `device_id` and an `api_key` in the `tk_<key_id>_<32-byte-base64url-secret>` format; `name` and `device_type` are optional. Never commit this value or place a real key in documentation.
+5. Apply migrations: `./scripts/migrate-up.sh`.
+6. Seed active devices and their HMAC-only credential records: `go -C api run ./cmd/seed`. In a Compose deployment, run the bundled command after migrations: `docker compose -f deploy/compose.yaml --env-file .env run --rm --entrypoint /seed api`.
+7. Run the API: `go -C api run ./cmd/api`.
+8. Run the frontend: `npm --prefix frontend run dev`.
 
 The bootstrap API exposes only `GET /healthz` and `GET /readyz`. Product endpoints land through approved tickets.
 

@@ -25,6 +25,7 @@ services:
       POSTGRES_URL: postgresql://${POSTGRES_USER:?set database user}:${POSTGRES_PASSWORD:?set database password}@postgres:5432/${POSTGRES_DB:?set database name}?sslmode=disable
       REDIS_URL: redis://:${REDIS_PASSWORD:?set a Redis password}@redis:6379/0
       TELEMETRY_API_KEY_PEPPER: ${TELEMETRY_API_KEY_PEPPER:?set an API-key pepper}
+      TELEMETRY_DEVICE_SEEDS: ${TELEMETRY_DEVICE_SEEDS:-[]}
     expose: ["8080"]
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/healthz"]

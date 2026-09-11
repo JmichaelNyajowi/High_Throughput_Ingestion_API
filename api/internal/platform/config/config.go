@@ -1,8 +1,12 @@
 package config
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -18,12 +22,20 @@ type DependencyTimeouts struct {
 	RedisTimeout    time.Duration
 }
 
+type DeviceSeed struct {
+	DeviceID   string `json:"device_id"`
+	Name       string `json:"name"`
+	DeviceType string `json:"device_type"`
+	APIKey     string `json:"api_key"`
+}
+
 type Config struct {
 	ListenAddr      string
 	Environment     string
 	PostgresURL     string
 	RedisURL        string
 	APIKeyPepper    string
+	DeviceSeeds     []DeviceSeed
 	Server          ServerTimeouts
 	Dependencies    DependencyTimeouts
 	ShutdownTimeout time.Duration
@@ -50,12 +62,17 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	deviceSeeds, err := loadDeviceSeeds()
+	if err != nil {
+		return Config{}, err
+	}
 	config := Config{
 		ListenAddr:      listenAddr,
 		Environment:     environment,
 		PostgresURL:     os.Getenv("POSTGRES_URL"),
 		RedisURL:        os.Getenv("REDIS_URL"),
 		APIKeyPepper:    os.Getenv("TELEMETRY_API_KEY_PEPPER"),
+		DeviceSeeds:     deviceSeeds,
 		Server:          serverTimeouts,
 		Dependencies:    dependencyTimeouts,
 		ShutdownTimeout: shutdownTimeout,
@@ -72,6 +89,27 @@ func Load() (Config, error) {
 		}
 	}
 	return config, nil
+}
+
+func loadDeviceSeeds() ([]DeviceSeed, error) {
+	value := os.Getenv("TELEMETRY_DEVICE_SEEDS")
+	if value == "" {
+		return nil, nil
+	}
+	if !strings.HasPrefix(strings.TrimSpace(value), "[") {
+		return nil, fmt.Errorf("TELEMETRY_DEVICE_SEEDS must be a JSON array")
+	}
+
+	decoder := json.NewDecoder(bytes.NewBufferString(value))
+	decoder.DisallowUnknownFields()
+	var seeds []DeviceSeed
+	if err := decoder.Decode(&seeds); err != nil {
+		return nil, fmt.Errorf("TELEMETRY_DEVICE_SEEDS must be a JSON array")
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return nil, fmt.Errorf("TELEMETRY_DEVICE_SEEDS must be a JSON array")
+	}
+	return seeds, nil
 }
 
 func loadServerTimeouts() (ServerTimeouts, error) {

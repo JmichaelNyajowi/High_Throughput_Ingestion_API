@@ -20,6 +20,10 @@ func TestCaddyEnforcesContractAccessBoundaries(t *testing.T) {
 	if strings.Contains(config, "handle @internal-observability") {
 		t.Fatal("internal observability endpoints must not be proxied through the public Caddy gateway")
 	}
+	if !strings.Contains(config, "@device path /v1/telemetry/batches") {
+		t.Fatal("Caddyfile must route only the ingestion endpoint as the device API-key boundary")
+	}
+	requireCaddyBlock(t, config, "handle @device", []string{"reverse_proxy api:8080"})
 	requireCaddyBlock(t, config, "@operator", []string{"path /v1/live/* /v1/history/*"})
 	requireCaddyBlock(t, config, "handle @operator", []string{
 		"@operator-private",

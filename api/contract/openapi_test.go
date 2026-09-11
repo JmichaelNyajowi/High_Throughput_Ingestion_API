@@ -66,6 +66,28 @@ func TestIngestionContractDocumentsAtomicAdmission(t *testing.T) {
 	}
 }
 
+func TestDeviceCredentialContractIsLimitedToIngestion(t *testing.T) {
+	document := loadContract(t)
+	requireSecurity(t, requireOperation(t, document, "/v1/telemetry/batches", http.MethodPost), "DeviceAPIKey")
+
+	for _, endpoint := range []struct {
+		path   string
+		method string
+	}{
+		{"/v1/live/fleet", http.MethodGet},
+		{"/v1/live/devices/{deviceId}", http.MethodGet},
+		{"/v1/history/devices/{deviceId}", http.MethodGet},
+		{"/healthz", http.MethodGet},
+		{"/readyz", http.MethodGet},
+		{"/metrics", http.MethodGet},
+	} {
+		operation := requireOperation(t, document, endpoint.path, endpoint.method)
+		if hasSecurity(operation, "DeviceAPIKey") {
+			t.Fatalf("%s must not accept a device credential", operation.OperationID)
+		}
+	}
+}
+
 func TestIngestionContractAllowsOptionalCanonicalUnitsAndEnforcesRanges(t *testing.T) {
 	document := loadContract(t)
 	for _, rule := range []struct {
@@ -214,15 +236,22 @@ func requireOperation(t *testing.T, document *openapi3.T, path, method string) *
 
 func requireSecurity(t *testing.T, operation *openapi3.Operation, scheme string) {
 	t.Helper()
+	if hasSecurity(operation, scheme) {
+		return
+	}
+	t.Fatalf("%s must declare %s security", operation.OperationID, scheme)
+}
+
+func hasSecurity(operation *openapi3.Operation, scheme string) bool {
 	if operation.Security == nil {
-		t.Fatalf("%s must declare %s security", operation.OperationID, scheme)
+		return false
 	}
 	for _, requirement := range *operation.Security {
 		if _, found := requirement[scheme]; found {
-			return
+			return true
 		}
 	}
-	t.Fatalf("%s must declare %s security", operation.OperationID, scheme)
+	return false
 }
 
 func requireResponses(t *testing.T, operation *openapi3.Operation, statuses ...int) {
