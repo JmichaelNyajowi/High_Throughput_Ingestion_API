@@ -181,6 +181,11 @@ func WriteError(w http.ResponseWriter, r *http.Request, status int, code, messag
 	writeJSON(w, status, payload)
 }
 
+// WriteJSON writes a contract response with the shared JSON content type.
+func WriteJSON(w http.ResponseWriter, status int, payload any) {
+	writeJSON(w, status, payload)
+}
+
 func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

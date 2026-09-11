@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -20,6 +21,14 @@ type ServerTimeouts struct {
 type DependencyTimeouts struct {
 	PostgresTimeout time.Duration
 	RedisTimeout    time.Duration
+}
+
+// AdmissionQueueConfig defines the fixed in-memory work bound. The defaults
+// are an initial benchmark baseline for the four-vCPU MVP host, not a claim of
+// global queueing capacity.
+type AdmissionQueueConfig struct {
+	ShardCount       int
+	CapacityPerShard int
 }
 
 type DeviceSeed struct {
@@ -38,6 +47,7 @@ type Config struct {
 	DeviceSeeds     []DeviceSeed
 	Server          ServerTimeouts
 	Dependencies    DependencyTimeouts
+	AdmissionQueue  AdmissionQueueConfig
 	ShutdownTimeout time.Duration
 }
 
@@ -62,6 +72,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	admissionQueue, err := loadAdmissionQueueConfig()
+	if err != nil {
+		return Config{}, err
+	}
 	deviceSeeds, err := loadDeviceSeeds()
 	if err != nil {
 		return Config{}, err
@@ -75,6 +89,7 @@ func Load() (Config, error) {
 		DeviceSeeds:     deviceSeeds,
 		Server:          serverTimeouts,
 		Dependencies:    dependencyTimeouts,
+		AdmissionQueue:  admissionQueue,
 		ShutdownTimeout: shutdownTimeout,
 	}
 	if environment == "production" {
@@ -147,6 +162,33 @@ func loadDependencyTimeouts() (DependencyTimeouts, error) {
 		return DependencyTimeouts{}, err
 	}
 	return DependencyTimeouts{PostgresTimeout: postgresTimeout, RedisTimeout: redisTimeout}, nil
+}
+
+func loadAdmissionQueueConfig() (AdmissionQueueConfig, error) {
+	shardCount, err := loadBoundedInt("TELEMETRY_SHARD_COUNT", 4, 1, 64)
+	if err != nil {
+		return AdmissionQueueConfig{}, err
+	}
+	capacityPerShard, err := loadBoundedInt("TELEMETRY_SHARD_QUEUE_CAPACITY", 64, 1, 1_024)
+	if err != nil {
+		return AdmissionQueueConfig{}, err
+	}
+	if shardCount*capacityPerShard > 1_024 {
+		return AdmissionQueueConfig{}, fmt.Errorf("TELEMETRY_SHARD_COUNT * TELEMETRY_SHARD_QUEUE_CAPACITY must not exceed 1024")
+	}
+	return AdmissionQueueConfig{ShardCount: shardCount, CapacityPerShard: capacityPerShard}, nil
+}
+
+func loadBoundedInt(name string, fallback, minimum, maximum int) (int, error) {
+	value := os.Getenv(name)
+	if value == "" {
+		return fallback, nil
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed < minimum || parsed > maximum {
+		return 0, fmt.Errorf("%s must be an integer between %d and %d", name, minimum, maximum)
+	}
+	return parsed, nil
 }
 
 func loadDuration(name string, fallback time.Duration) (time.Duration, error) {

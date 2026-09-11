@@ -79,6 +79,35 @@ func TestLoadUsesValidatedTimeoutOverrides(t *testing.T) {
 	}
 }
 
+func TestLoadProvidesValidatedBoundedAdmissionQueueConfiguration(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("TELEMETRY_SHARD_COUNT", "")
+	t.Setenv("TELEMETRY_SHARD_QUEUE_CAPACITY", "")
+
+	config, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if config.AdmissionQueue.ShardCount != 4 || config.AdmissionQueue.CapacityPerShard != 64 {
+		t.Fatalf("AdmissionQueue = %#v, want four shards with capacity 64 each", config.AdmissionQueue)
+	}
+
+	t.Setenv("TELEMETRY_SHARD_COUNT", "0")
+	if _, err := Load(); err == nil {
+		t.Fatal("Load() error = nil for zero shard count")
+	}
+	t.Setenv("TELEMETRY_SHARD_COUNT", "4")
+	t.Setenv("TELEMETRY_SHARD_QUEUE_CAPACITY", "4097")
+	if _, err := Load(); err == nil {
+		t.Fatal("Load() error = nil for unbounded per-shard capacity")
+	}
+	t.Setenv("TELEMETRY_SHARD_QUEUE_CAPACITY", "64")
+	t.Setenv("TELEMETRY_SHARD_COUNT", "64")
+	if _, err := Load(); err == nil {
+		t.Fatal("Load() error = nil for oversized total queue capacity")
+	}
+}
+
 func TestLoadParsesDeviceCredentialSeeds(t *testing.T) {
 	t.Setenv("APP_ENV", "development")
 	t.Setenv("TELEMETRY_DEVICE_SEEDS", `[{"device_id":"edge-01","name":"Boiler inlet","device_type":"gateway","api_key":"tk_edge-01_not-a-real-key"}]`)

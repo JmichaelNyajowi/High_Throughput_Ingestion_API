@@ -42,8 +42,9 @@ type BatchValidator struct {
 }
 
 type ValidatedBatch struct {
-	Device credentials.AuthorizedDevice
-	Events []ValidatedEvent
+	Device    credentials.AuthorizedDevice
+	Events    []ValidatedEvent
+	RequestID string
 }
 
 type ValidatedEvent struct {
@@ -110,7 +111,7 @@ func (validator BatchValidator) Middleware(next http.Handler) http.Handler {
 			httpserver.WriteError(w, r, err.status, err.code, err.message)
 			return
 		}
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), validatedBatchContextKey{}, batch)))
+		next.ServeHTTP(w, r.WithContext(withValidatedBatch(r.Context(), batch)))
 	})
 }
 
@@ -227,4 +228,8 @@ func invalid(status int, code, message string) *validationError {
 func ValidatedBatchFromContext(ctx context.Context) (ValidatedBatch, bool) {
 	batch, found := ctx.Value(validatedBatchContextKey{}).(ValidatedBatch)
 	return batch, found
+}
+
+func withValidatedBatch(ctx context.Context, batch ValidatedBatch) context.Context {
+	return context.WithValue(ctx, validatedBatchContextKey{}, batch)
 }

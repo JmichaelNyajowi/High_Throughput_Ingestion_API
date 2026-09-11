@@ -22,6 +22,18 @@ Docker is required for the full local topology and Testcontainers tests. It is n
 
 The bootstrap API exposes only `GET /healthz` and `GET /readyz`. Product endpoints land through approved tickets.
 
+## Admission queue baseline
+
+`TELEMETRY_SHARD_COUNT` defaults to `4` and `TELEMETRY_SHARD_QUEUE_CAPACITY`
+defaults to `64`. They configure four fixed device-shard workers with at most
+64 whole batches queued per shard (256 batches total); the maximum 500-event
+batch means this is a strict in-memory bound, not a durability guarantee.
+
+Startup rejects values outside `1–64` shards or `1–1024` batches per shard and
+also caps their product at 1,024 queued batches. Tune only from benchmark
+evidence on the target host; a `202` is still only an in-memory admission
+acknowledgement.
+
 ## Quality commands
 
 | Check | Command |
