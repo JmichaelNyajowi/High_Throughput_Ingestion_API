@@ -17,12 +17,13 @@ import (
 const persistenceInputCapacityBatches = telemetry.RetryBufferCapacityEvents / 500
 
 type application struct {
-	handler   http.Handler
-	readiness *httpserver.Readiness
-	pool      *pgxpool.Pool
-	queue     *telemetry.DeviceShardedQueue
-	batcher   *telemetry.Batcher
-	retry     *telemetry.RetryBuffer
+	handler    http.Handler
+	readiness  *httpserver.Readiness
+	pool       *pgxpool.Pool
+	queue      *telemetry.DeviceShardedQueue
+	batcher    *telemetry.Batcher
+	retry      *telemetry.RetryBuffer
+	aggregates *telemetry.AggregateEngine
 }
 
 func newApplication(ctx context.Context, cfg config.Config, logger *slog.Logger) (*application, error) {
@@ -50,10 +51,14 @@ func newApplication(ctx context.Context, cfg config.Config, logger *slog.Logger)
 		pool.Close()
 		return nil, err
 	}
+	aggregates := telemetry.NewAggregateEngine(nil)
 	queue, err := telemetry.NewDeviceShardedQueue(telemetry.QueueConfig{
 		ShardCount:       cfg.AdmissionQueue.ShardCount,
 		CapacityPerShard: cfg.AdmissionQueue.CapacityPerShard,
-	}, batcher.Processor, logger)
+	}, func(ctx context.Context, batch ingestion.ValidatedBatch) {
+		aggregates.Process(batch)
+		batcher.Processor(ctx, batch)
+	}, logger)
 	if err != nil {
 		_ = batcher.Shutdown(context.Background())
 		_ = retry.Shutdown(context.Background())
@@ -77,11 +82,12 @@ func newApplication(ctx context.Context, cfg config.Config, logger *slog.Logger)
 				mux.Handle("POST /v1/telemetry/batches", admissionRoute)
 			},
 		}),
-		readiness: readiness,
-		pool:      pool,
-		queue:     queue,
-		batcher:   batcher,
-		retry:     retry,
+		readiness:  readiness,
+		pool:       pool,
+		queue:      queue,
+		batcher:    batcher,
+		retry:      retry,
+		aggregates: aggregates,
 	}, nil
 }
 

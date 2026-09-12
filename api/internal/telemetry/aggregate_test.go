@@ -34,7 +34,105 @@ func TestAggregateEngineBuildsFiveMinuteProcessingTimeSnapshot(t *testing.T) {
 	if want := now.Truncate(time.Second); !snapshot.WindowEnd.Equal(want) {
 		t.Fatalf("window end=%s, want %s", snapshot.WindowEnd, want)
 	}
-	if snapshot.Status != ThresholdNormal {
-		t.Fatalf("status=%q, want %q", snapshot.Status, ThresholdNormal)
+	if snapshot.Status != ThresholdWarning {
+		t.Fatalf("status=%q, want %q", snapshot.Status, ThresholdWarning)
+	}
+}
+
+func TestAggregateEngineSkipsEventsLateAtWorkerProcessingTime(t *testing.T) {
+	now := time.Date(2026, time.September, 12, 10, 0, 30, 0, time.UTC)
+	engine := NewAggregateEngine(func() time.Time { return now })
+	engine.Process(ingestion.ValidatedBatch{
+		Device: credentials.AuthorizedDevice{ExternalID: "edge-01"},
+		Events: []ingestion.ValidatedEvent{{
+			MeasurementType: "voltage",
+			Value:           12,
+			Timestamp:       now.Add(-61 * time.Second),
+		}},
+	})
+
+	if _, found := engine.Snapshot("edge-01", "voltage"); found {
+		t.Fatal("event more than 60 seconds late must not create a live aggregate")
+	}
+}
+
+func TestAggregateEngineAcceptsEventAtLateEventBoundary(t *testing.T) {
+	now := time.Date(2026, time.September, 12, 10, 0, 30, 900_000_000, time.UTC)
+	engine := NewAggregateEngine(func() time.Time { return now })
+	engine.Process(ingestion.ValidatedBatch{
+		Device: credentials.AuthorizedDevice{ExternalID: "edge-01"},
+		Events: []ingestion.ValidatedEvent{{
+			MeasurementType: "voltage",
+			Value:           12,
+			Timestamp:       now.Add(-60 * time.Second),
+		}},
+	})
+
+	if _, found := engine.Snapshot("edge-01", "voltage"); !found {
+		t.Fatal("event exactly 60 seconds old must remain eligible for live aggregation")
+	}
+}
+
+func TestAggregateEngineSkipsLateEventWithSubsecondWorkerClock(t *testing.T) {
+	now := time.Date(2026, time.September, 12, 10, 0, 30, 900_000_000, time.UTC)
+	engine := NewAggregateEngine(func() time.Time { return now })
+	engine.Process(ingestion.ValidatedBatch{
+		Device: credentials.AuthorizedDevice{ExternalID: "edge-01"},
+		Events: []ingestion.ValidatedEvent{{
+			MeasurementType: "voltage",
+			Value:           12,
+			Timestamp:       now.Add(-60*time.Second - time.Nanosecond),
+		}},
+	})
+
+	if _, found := engine.Snapshot("edge-01", "voltage"); found {
+		t.Fatal("event even fractionally more than 60 seconds old must not mutate live state")
+	}
+}
+
+func TestAggregateEngineExpiresBucketsOutsideFiveMinuteWindow(t *testing.T) {
+	now := time.Date(2026, time.September, 12, 10, 0, 0, 0, time.UTC)
+	engine := NewAggregateEngine(func() time.Time { return now })
+	engine.Process(ingestion.ValidatedBatch{
+		Device: credentials.AuthorizedDevice{ExternalID: "edge-01"},
+		Events: []ingestion.ValidatedEvent{{
+			MeasurementType: "pressure",
+			Value:           300,
+			Timestamp:       now,
+		}},
+	})
+	now = now.Add(5 * time.Minute)
+
+	if _, found := engine.Snapshot("edge-01", "pressure"); found {
+		t.Fatal("bucket older than five minutes must leave the live window")
+	}
+}
+
+func TestThresholdStatusUsesExactPRDBoundaries(t *testing.T) {
+	for _, test := range []struct {
+		measurement string
+		value       float64
+		want        ThresholdStatus
+	}{
+		{"temperature", 69.999, ThresholdNormal},
+		{"temperature", 70, ThresholdWarning},
+		{"temperature", 85, ThresholdWarning},
+		{"temperature", 85.001, ThresholdCritical},
+		{"voltage", 11.5, ThresholdNormal},
+		{"voltage", 10.5, ThresholdWarning},
+		{"voltage", 11.499, ThresholdWarning},
+		{"voltage", 10.499, ThresholdCritical},
+		{"battery", 20, ThresholdNormal},
+		{"battery", 10, ThresholdWarning},
+		{"battery", 19.999, ThresholdWarning},
+		{"battery", 9.999, ThresholdCritical},
+		{"pressure", 300, ThresholdNormal},
+		{"pressure", 300.001, ThresholdWarning},
+		{"pressure", 700, ThresholdWarning},
+		{"pressure", 700.001, ThresholdCritical},
+	} {
+		if got := thresholdStatus(test.measurement, test.value); got != test.want {
+			t.Errorf("%s at %v = %q, want %q", test.measurement, test.value, got, test.want)
+		}
 	}
 }

@@ -59,6 +59,30 @@ func TestApplicationRejectsValidBatchBeforeQueueWhenRetryGuardIsUnavailable(t *t
 			t.Errorf("shutdown application: %v", err)
 		}
 	})
+	acceptedRequest := httptest.NewRequest(http.MethodPost, "/v1/telemetry/batches", strings.NewReader(`{"events":[{"event_id":"aggregate-event","device_id":"edge-01","timestamp":"`+time.Now().UTC().Format(time.RFC3339)+`","measurement_type":"temperature","value":20}]}`))
+	acceptedRequest.Header.Set("Content-Type", "application/json")
+	acceptedRequest.Header.Set("X-API-Key", apiKey)
+	acceptedResponse := httptest.NewRecorder()
+	application.handler.ServeHTTP(acceptedResponse, acceptedRequest)
+	if acceptedResponse.Code != http.StatusAccepted {
+		t.Fatalf("aggregate admission status=%d, want 202", acceptedResponse.Code)
+	}
+	waitForApplicationCondition(t, func() bool {
+		snapshot, found := application.aggregates.Snapshot("edge-01", "temperature")
+		return found && snapshot.Count == 1 && snapshot.LatestValue == 20
+	})
+	lateRequest := httptest.NewRequest(http.MethodPost, "/v1/telemetry/batches", strings.NewReader(`{"events":[{"event_id":"late-event","device_id":"edge-01","timestamp":"`+time.Now().UTC().Add(-61*time.Second).Format(time.RFC3339Nano)+`","measurement_type":"voltage","value":12}]}`))
+	lateRequest.Header.Set("Content-Type", "application/json")
+	lateRequest.Header.Set("X-API-Key", apiKey)
+	lateResponse := httptest.NewRecorder()
+	application.handler.ServeHTTP(lateResponse, lateRequest)
+	if lateResponse.Code != http.StatusAccepted {
+		t.Fatalf("late event admission status=%d, want 202", lateResponse.Code)
+	}
+	waitForApplicationPersistedEvent(t, ctx, pool, "late-event")
+	if _, found := application.aggregates.Snapshot("edge-01", "voltage"); found {
+		t.Fatal("late event must persist without creating a live aggregate")
+	}
 
 	shutdownContext, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
@@ -97,4 +121,30 @@ func waitForApplicationPostgres(t *testing.T, ctx context.Context, pool *pgxpool
 func applicationTestAPIKey(keyID string, value byte) string {
 	secret := base64.RawURLEncoding.EncodeToString([]byte(strings.Repeat(string([]byte{value}), 32)))
 	return "tk_" + keyID + "_" + secret
+}
+
+func waitForApplicationCondition(t *testing.T, condition func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for !condition() {
+		if time.Now().After(deadline) {
+			t.Fatal("application condition was not reached")
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+func waitForApplicationPersistedEvent(t *testing.T, ctx context.Context, pool *pgxpool.Pool, eventID string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		var count int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM telemetry_events WHERE event_id = $1`, eventID).Scan(&count); err == nil && count == 1 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("telemetry event %q was not persisted", eventID)
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
 }
