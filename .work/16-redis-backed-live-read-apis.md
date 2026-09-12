@@ -2,7 +2,7 @@
 
 **Type:** logic (test-first)
 **Blocked by:** 02, 13, 14, 15 — contract, cache model, degradation semantics, and runtime state must exist.
-**Status:** planned
+**Status:** done
 
 ## What this delivers
 
@@ -31,3 +31,6 @@ The dashboard can fetch fleet and device live snapshots from Redis with clear fr
 
 - Write HTTP tests first with Redis and PostgreSQL spies/integration evidence proving the no-SELECT contract.
 
+## Build-gate trace and review
+
+Approved (2026-09-12). `internal/fleet` depends only on the Redis client and cache-mode function; it has no PostgreSQL import or repository seam. Fleet/device routes read the versioned last-seen, measurement-set, and aggregate hash keys, derive active/stale/unknown freshness, aggregate threshold counts, and return the documented live snapshot fields. Cache mode `degraded` returns a typed `503` without a fallback query. Full Docker-backed race tests, vet, formatting, and diff checks pass.

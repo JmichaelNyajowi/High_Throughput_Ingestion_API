@@ -2,7 +2,7 @@
 
 **Type:** logic (test-first)
 **Blocked by:** 02, 10, 15 — contract, raw events, and protected runtime routes must exist.
-**Status:** planned
+**Status:** done
 
 ## What this delivers
 
@@ -30,3 +30,7 @@ An operator can deliberately request a limited, indexed PostgreSQL history resul
 ## Verification
 
 - Write validation and real-PostgreSQL query-plan/integration tests first.
+
+## Build-gate trace and review
+
+Approved (2026-09-12). The manual history route requires explicit RFC3339 `from`/`to` and integer `limit` parameters, rejects invalid bounds before database work, caps range at 24 hours and page size at 1,000, and uses parameterized PostgreSQL SQL with deterministic event-time ordering and a two-second query context. It is isolated from Redis live reads and has no automatic refresh mechanism. Operator access remains enforced at Caddy's `/v1/history/*` private-network Basic Auth boundary. Full Docker-backed race tests, vet, formatting, and diff checks pass.

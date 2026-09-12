@@ -4,8 +4,11 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
+	"github.com/example/telemetry/api/internal/fleet"
+	"github.com/example/telemetry/api/internal/history"
 	"github.com/example/telemetry/api/internal/ingestion"
 	"github.com/example/telemetry/api/internal/platform/config"
 	"github.com/example/telemetry/api/internal/platform/httpserver"
@@ -30,6 +33,7 @@ type application struct {
 	aggregates *telemetry.AggregateEngine
 	redis      *redis.Client
 	publisher  *telemetry.RedisStatePublisher
+	fleet      *fleet.Reader
 	rebuilder  *telemetry.RedisRebuilder
 }
 
@@ -104,6 +108,7 @@ func newApplication(ctx context.Context, cfg config.Config, logger *slog.Logger)
 	}
 
 	readiness := httpserver.NewReadiness()
+	fleetReader := fleet.New(redisClient, func() string { return string(publisher.Mode()) })
 	registry := prometheus.NewRegistry()
 	registry.MustRegister(prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: "telemetry_queue_capacity", Help: "Configured admission queue capacity."}, func() float64 { return float64(queue.Metrics().Capacity) }))
 	registry.MustRegister(prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: "telemetry_queue_depth", Help: "Current admission queue depth."}, func() float64 { return float64(queue.Metrics().Depth) }))
@@ -143,6 +148,52 @@ func newApplication(ctx context.Context, cfg config.Config, logger *slog.Logger)
 			},
 			RegisterRoutes: func(mux *http.ServeMux) {
 				mux.Handle("POST /v1/telemetry/batches", admissionRoute)
+				mux.HandleFunc("GET /v1/live/fleet", func(w http.ResponseWriter, r *http.Request) {
+					devices, err := fleetReader.Fleet(r.Context())
+					if err != nil {
+						httpserver.WriteError(w, r, http.StatusServiceUnavailable, "unavailable", "Live aggregates are unavailable")
+						return
+					}
+					active, stale, warning, critical := 0, 0, 0, 0
+					for _, d := range devices {
+						if d.Freshness == "active" {
+							active++
+						} else {
+							stale++
+						}
+						if d.OverallStatus == "warning" {
+							warning++
+						}
+						if d.OverallStatus == "critical" {
+							critical++
+						}
+					}
+					httpserver.WriteJSON(w, http.StatusOK, map[string]any{"mode": "live", "generated_at": time.Now().UTC(), "summary": map[string]int{"active": active, "stale": stale, "warning": warning, "critical": critical}, "devices": devices})
+				})
+				mux.HandleFunc("GET /v1/live/devices/{deviceId}", func(w http.ResponseWriter, r *http.Request) {
+					id := r.PathValue("deviceId")
+					d, err := fleetReader.Device(r.Context(), id)
+					if err != nil {
+						httpserver.WriteError(w, r, http.StatusServiceUnavailable, "unavailable", "Live aggregates are unavailable")
+						return
+					}
+					httpserver.WriteJSON(w, http.StatusOK, map[string]any{"mode": "live", "generated_at": time.Now().UTC(), "device": d})
+				})
+				mux.HandleFunc("GET /v1/history/devices/{deviceId}", func(w http.ResponseWriter, r *http.Request) {
+					from, e1 := time.Parse(time.RFC3339, r.URL.Query().Get("from"))
+					to, e2 := time.Parse(time.RFC3339, r.URL.Query().Get("to"))
+					limit, e3 := strconv.Atoi(r.URL.Query().Get("limit"))
+					if e1 != nil || e2 != nil || e3 != nil {
+						httpserver.WriteError(w, r, http.StatusBadRequest, "invalid_request", "Invalid history bounds")
+						return
+					}
+					events, err := history.Query(r.Context(), pool, r.PathValue("deviceId"), from, to, limit)
+					if err != nil {
+						httpserver.WriteError(w, r, http.StatusBadRequest, "invalid_request", "Invalid history bounds")
+						return
+					}
+					httpserver.WriteJSON(w, http.StatusOK, map[string]any{"request_id": httpserver.RequestID(r.Context()), "events": events, "limit": limit})
+				})
 			},
 		}),
 		readiness:  readiness,
@@ -153,6 +204,7 @@ func newApplication(ctx context.Context, cfg config.Config, logger *slog.Logger)
 		aggregates: aggregates,
 		redis:      redisClient,
 		publisher:  publisher,
+		fleet:      fleetReader,
 		rebuilder:  rebuilder,
 	}, nil
 }
