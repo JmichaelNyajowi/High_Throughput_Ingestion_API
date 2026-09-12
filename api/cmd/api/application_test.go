@@ -43,6 +43,7 @@ func TestApplicationRejectsValidBatchBeforeQueueWhenRetryGuardIsUnavailable(t *t
 	}
 	application, err := newApplication(ctx, config.Config{
 		PostgresURL:  url,
+		RedisURL:     "redis://127.0.0.1:1/0",
 		APIKeyPepper: pepper,
 		AdmissionQueue: config.AdmissionQueueConfig{
 			ShardCount:       1,
@@ -70,6 +71,9 @@ func TestApplicationRejectsValidBatchBeforeQueueWhenRetryGuardIsUnavailable(t *t
 	waitForApplicationCondition(t, func() bool {
 		snapshot, found := application.aggregates.Snapshot("edge-01", "temperature")
 		return found && snapshot.Count == 1 && snapshot.LatestValue == 20
+	})
+	waitForApplicationCondition(t, func() bool {
+		return application.publisher.Metrics().Errors > 0
 	})
 	lateRequest := httptest.NewRequest(http.MethodPost, "/v1/telemetry/batches", strings.NewReader(`{"events":[{"event_id":"late-event","device_id":"edge-01","timestamp":"`+time.Now().UTC().Add(-61*time.Second).Format(time.RFC3339Nano)+`","measurement_type":"voltage","value":12}]}`))
 	lateRequest.Header.Set("Content-Type", "application/json")

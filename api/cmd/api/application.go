@@ -4,12 +4,14 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/example/telemetry/api/internal/ingestion"
 	"github.com/example/telemetry/api/internal/platform/config"
 	"github.com/example/telemetry/api/internal/platform/httpserver"
 	"github.com/example/telemetry/api/internal/telemetry"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 )
 
 // A full 500-event request must not grow the persistence input beyond the
@@ -24,6 +26,8 @@ type application struct {
 	batcher    *telemetry.Batcher
 	retry      *telemetry.RetryBuffer
 	aggregates *telemetry.AggregateEngine
+	redis      *redis.Client
+	publisher  *telemetry.RedisStatePublisher
 }
 
 func newApplication(ctx context.Context, cfg config.Config, logger *slog.Logger) (*application, error) {
@@ -38,16 +42,36 @@ func newApplication(ctx context.Context, cfg config.Config, logger *slog.Logger)
 		pool.Close()
 		return nil, err
 	}
+	redisOptions, err := redis.ParseURL(cfg.RedisURL)
+	if err != nil {
+		pool.Close()
+		return nil, err
+	}
+	redisClient := redis.NewClient(redisOptions)
+	redisTimeout := cfg.Dependencies.RedisTimeout
+	if redisTimeout > 250*time.Millisecond {
+		redisTimeout = 250 * time.Millisecond
+	}
+	publisher, err := telemetry.NewRedisStatePublisher(redisClient, telemetry.RedisPublisherConfig{Timeout: redisTimeout, Logger: logger})
+	if err != nil {
+		_ = redisClient.Close()
+		pool.Close()
+		return nil, err
+	}
 
 	repository := telemetry.NewPostgresEventRepository(pool)
 	retry, err := telemetry.NewRetryBuffer(repository, telemetry.RetryConfig{})
 	if err != nil {
+		_ = publisher.Shutdown(context.Background())
+		_ = redisClient.Close()
 		pool.Close()
 		return nil, err
 	}
 	batcher, err := telemetry.NewBatcher(repository, persistenceInputCapacityBatches, retry)
 	if err != nil {
 		_ = retry.Shutdown(context.Background())
+		_ = publisher.Shutdown(context.Background())
+		_ = redisClient.Close()
 		pool.Close()
 		return nil, err
 	}
@@ -56,12 +80,15 @@ func newApplication(ctx context.Context, cfg config.Config, logger *slog.Logger)
 		ShardCount:       cfg.AdmissionQueue.ShardCount,
 		CapacityPerShard: cfg.AdmissionQueue.CapacityPerShard,
 	}, func(ctx context.Context, batch ingestion.ValidatedBatch) {
-		aggregates.Process(batch)
+		snapshots := aggregates.Process(batch)
+		publisher.Publish(batch.Device.ExternalID, time.Now().UTC(), snapshots)
 		batcher.Processor(ctx, batch)
 	}, logger)
 	if err != nil {
 		_ = batcher.Shutdown(context.Background())
 		_ = retry.Shutdown(context.Background())
+		_ = publisher.Shutdown(context.Background())
+		_ = redisClient.Close()
 		pool.Close()
 		return nil, err
 	}
@@ -88,15 +115,20 @@ func newApplication(ctx context.Context, cfg config.Config, logger *slog.Logger)
 		batcher:    batcher,
 		retry:      retry,
 		aggregates: aggregates,
+		redis:      redisClient,
+		publisher:  publisher,
 	}, nil
 }
 
 func (application *application) Shutdown(ctx context.Context) error {
 	var firstError error
-	for _, drainer := range []interface{ Shutdown(context.Context) error }{application.queue, application.batcher, application.retry} {
+	for _, drainer := range []interface{ Shutdown(context.Context) error }{application.queue, application.publisher, application.batcher, application.retry} {
 		if err := drainer.Shutdown(ctx); err != nil && firstError == nil {
 			firstError = err
 		}
+	}
+	if err := application.redis.Close(); err != nil && firstError == nil {
+		firstError = err
 	}
 	application.pool.Close()
 	return firstError

@@ -2,7 +2,7 @@
 
 **Type:** logic (test-first)
 **Blocked by:** 10, 11, 13 — persistence safety and cache publication must exist.
-**Status:** planned
+**Status:** in-progress
 
 ## What this delivers
 
@@ -30,4 +30,3 @@ Redis outages switch the system to explicit persist-only mode; live aggregates p
 ## Verification
 
 - Write outage/recovery/rebuild limit tests first using real dependency containers.
-
