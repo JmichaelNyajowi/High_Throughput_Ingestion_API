@@ -1,9 +1,12 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { expect, test } from "vitest";
 import { App } from "./App";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+function renderApp(path: string) { return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App initialPath={path} /></QueryClientProvider>); }
 
 test("Fleet provides the first keyboard skip link and an accessible pending table", () => {
-  render(<App initialPath="/" />);
+  renderApp("/");
 
   const skipLink = screen.getByRole("link", { name: "Skip to fleet content" });
   const main = screen.getByRole("main");
@@ -19,17 +22,17 @@ test("Fleet provides the first keyboard skip link and an accessible pending tabl
 });
 
 test("detail, history, and recovery destinations retain one clear heading and navigation", () => {
-  const detail = render(<App initialPath="/devices/gateway-17" />);
+  const detail = renderApp("/devices/gateway-17");
   expect(screen.getByRole("heading", { level: 1, name: "gateway-17" })).toBeVisible();
   expect(within(screen.getByRole("navigation", { name: "Primary navigation" })).getByRole("link", { name: "Fleet" })).not.toHaveAttribute("aria-current");
 
   detail.unmount();
-  const history = render(<App initialPath="/devices/gateway-17/history" />);
+  const history = renderApp("/devices/gateway-17/history");
   expect(screen.getByRole("heading", { level: 1, name: "History for gateway-17" })).toBeVisible();
   expect(screen.getByRole("button", { name: "Run query" })).toBeDisabled();
 
   history.unmount();
-  render(<App initialPath="/missing" />);
+  renderApp("/missing");
   expect(screen.getByRole("heading", { level: 1, name: "Page not found" })).toBeVisible();
   expect(screen.getByRole("link", { name: "Return to fleet" })).toHaveAttribute("href", "/");
 });

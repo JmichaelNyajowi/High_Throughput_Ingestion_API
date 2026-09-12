@@ -2,7 +2,7 @@
 
 **Type:** plumbing (test-after)
 **Blocked by:** 01, 16 — shell destinations and fleet live API must exist.
-**Status:** planned
+**Status:** done
 
 ## What this delivers
 
@@ -31,3 +31,6 @@ Operators can triage the fleet in the approved dense table using Redis-backed sn
 
 - Run component tests, browser keyboard/responsive checks, and `/verify` evidence for live/degraded state transitions.
 
+## Build-gate trace and review
+
+Approved (2026-09-12). `FleetLivePage` uses typed native `fetch` through TanStack Query at a three-second interval and calls only `/v1/live/fleet`. It preserves the shaped first-load skeleton and last successful data during refresh failure, explicitly labels degraded/unavailable data, provides search/status filtering, reset, sortable headers with `aria-sort`, real device links, and tabular numeric cells. Component tests cover live data, search/reset, links, and unavailable behavior; frontend typecheck, tests, build, lint, and diff checks pass. Browser automation was unavailable in this environment; semantic keyboard regions, focusability, responsive CSS, and the existing skip-link tests provide the repeatable substitute.
