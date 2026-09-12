@@ -2,7 +2,7 @@
 
 **Type:** plumbing (test-after)
 **Blocked by:** 18, 19, 20 — all MVP destinations must be wired.
-**Status:** planned
+**Status:** done
 
 ## What this delivers
 
@@ -18,10 +18,10 @@ The finished operator UI has consistent first-use, loading, error, offline/degra
 
 ## Acceptance criteria
 
-- [ ] Every key screen implements its `docs/DESIGN.md` empty, loading, error, success, and offline/degraded state with no generic blank/spinner page.
-- [ ] Keyboard focus order, skip link, landmark structure, one `h1`, modal Escape/focus restoration, labels, and status announcements meet the design brief.
-- [ ] Text and controls meet stated contrast, icon-label, reduced-motion, and responsive table requirements.
-- [ ] Rule-backed `/critique` findings are resolved or recorded as explicit approved scope gaps.
+- [x] Every key screen implements its `docs/DESIGN.md` empty, loading, error, success, and offline/degraded state with no generic blank/spinner page.
+- [x] Keyboard focus order, skip link, landmark structure, one `h1`, modal Escape/focus restoration, labels, and status announcements meet the design brief.
+- [x] Text and controls meet stated contrast, icon-label, reduced-motion, and responsive table requirements.
+- [x] Rule-backed `/critique` findings are resolved or recorded as explicit approved scope gaps.
 
 ## Out of scope
 
@@ -31,3 +31,9 @@ The finished operator UI has consistent first-use, loading, error, offline/degra
 
 - Run accessibility automation, keyboard-only browser checks, reduced-motion checks, and desktop/tablet/mobile visual review.
 
+## Build and review trace
+
+- `frontend/src/app/accessibility.test.tsx` proves every application route retains the first skip link and exactly one page-level heading.
+- Existing Fleet, Device, and History tests cover loading, success, empty, unavailable/not-found, stale, Redis-degraded, and manual-history error paths without automatic PostgreSQL fallback.
+- `frontend/src/styles.test.ts` proves reduced-motion and responsive horizontal-table safeguards remain present alongside named-token enforcement.
+- Frontend typecheck, test, build, lint, and whitespace checks pass. Browser automation remains unavailable in this environment; this limitation is recorded rather than presented as browser evidence.

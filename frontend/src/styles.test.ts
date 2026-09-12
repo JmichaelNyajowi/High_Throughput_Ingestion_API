@@ -19,3 +19,10 @@ test("mobile styles preserve a visible product name", () => {
   expect(styles).toMatch(/@media \(max-width: 47\.9375rem\)[\s\S]*\.brand__name \{ display: inline; \}/);
   expect(styles).not.toMatch(/\.brand__name \{ display: none; \}/);
 });
+
+test("reduced motion and responsive table safeguards are defined", () => {
+  const styles = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
+  expect(styles).toContain("@media (prefers-reduced-motion: reduce)");
+  expect(styles).toContain(".table-scroll { overflow-x: auto; }");
+  expect(styles).toContain("@media (max-width: 47.9375rem)");
+});
