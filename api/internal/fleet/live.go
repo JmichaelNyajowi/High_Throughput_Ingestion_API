@@ -14,6 +14,8 @@ type Reader struct {
 	now   func() time.Time
 }
 
+var ErrDeviceNotFound = errors.New("device live aggregate not found")
+
 func New(redisClient redis.UniversalClient, mode func() string) *Reader {
 	return &Reader{redis: redisClient, mode: mode, now: time.Now}
 }
@@ -37,15 +39,19 @@ func (r *Reader) Fleet(ctx context.Context) ([]Device, error) {
 }
 
 type Aggregate struct {
-	MeasurementType                string    `json:"measurement_type"`
-	LatestValue                    float64   `json:"latest_value"`
-	LatestTimestamp                time.Time `json:"latest_timestamp"`
-	Count                          uint64    `json:"count"`
-	Sum, Average, Minimum, Maximum float64
-	WindowStart                    time.Time `json:"window_start"`
-	WindowEnd                      time.Time `json:"window_end"`
-	ThresholdStatus                string    `json:"threshold_status"`
-	UpdatedAt                      time.Time `json:"updated_at"`
+	MeasurementType string    `json:"measurement_type"`
+	Unit            string    `json:"unit"`
+	LatestValue     float64   `json:"latest_value"`
+	LatestTimestamp time.Time `json:"latest_timestamp"`
+	Count           uint64    `json:"count"`
+	Sum             float64   `json:"sum"`
+	Average         float64   `json:"average"`
+	Minimum         float64   `json:"minimum"`
+	Maximum         float64   `json:"maximum"`
+	WindowStart     time.Time `json:"window_start"`
+	WindowEnd       time.Time `json:"window_end"`
+	ThresholdStatus string    `json:"threshold_status"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 type Device struct {
 	DeviceID        string      `json:"device_id"`
@@ -61,7 +67,7 @@ func (r *Reader) Device(ctx context.Context, id string) (Device, error) {
 	}
 	score, err := r.redis.ZScore(ctx, "telemetry:v1:device-last-seen", id).Result()
 	if err == redis.Nil {
-		return Device{DeviceID: id, Freshness: "unknown", OverallStatus: "normal"}, nil
+		return Device{}, ErrDeviceNotFound
 	}
 	if err != nil {
 		return Device{}, err
@@ -82,7 +88,7 @@ func (r *Reader) Device(ctx context.Context, id string) (Device, error) {
 		if len(h) == 0 {
 			continue
 		}
-		a := Aggregate{MeasurementType: m, ThresholdStatus: h["status"]}
+		a := Aggregate{MeasurementType: m, Unit: measurementUnit(m), ThresholdStatus: h["status"]}
 		a.LatestValue, _ = strconv.ParseFloat(h["latest_value"], 64)
 		a.Count, _ = strconv.ParseUint(h["count"], 10, 64)
 		a.Sum, _ = strconv.ParseFloat(h["sum"], 64)
@@ -101,4 +107,19 @@ func (r *Reader) Device(ctx context.Context, id string) (Device, error) {
 		}
 	}
 	return d, nil
+}
+
+func measurementUnit(measurementType string) string {
+	switch measurementType {
+	case "temperature":
+		return "C"
+	case "voltage":
+		return "V"
+	case "battery":
+		return "%"
+	case "pressure":
+		return "kPa"
+	default:
+		return ""
+	}
 }

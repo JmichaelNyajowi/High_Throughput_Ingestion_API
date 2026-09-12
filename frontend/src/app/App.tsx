@@ -1,7 +1,7 @@
 import { ArrowLeft } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AppShell } from "../components/AppShell";
-import { DevicePendingPage, FleetLivePage } from "../modules/fleet";
+import { DeviceLivePage, FleetLivePage } from "../modules/fleet";
 import { HistoryPreQueryPage } from "../modules/history";
 import { resolveRoute } from "./routes";
 
@@ -9,7 +9,7 @@ export function App({ initialPath }: { initialPath?: string }) {
   const [pathname, setPathname] = useState(initialPath ?? window.location.pathname);
   useEffect(() => { const syncPath = () => setPathname(window.location.pathname); window.addEventListener("popstate", syncPath); return () => window.removeEventListener("popstate", syncPath); }, []);
   const route = resolveRoute(pathname);
-  const content = route.kind === "fleet" ? <FleetLivePage /> : route.kind === "device" ? <DevicePendingPage deviceID={route.deviceID} /> : route.kind === "history" ? <HistoryPreQueryPage deviceID={route.deviceID} /> : <NotFoundPage />;
+  const content = route.kind === "fleet" ? <FleetLivePage /> : route.kind === "device" ? <DeviceLivePage deviceID={route.deviceID} /> : route.kind === "history" ? <HistoryPreQueryPage deviceID={route.deviceID} /> : <NotFoundPage />;
   return <AppShell isFleet={route.kind === "fleet"}>{content}</AppShell>;
 }
 

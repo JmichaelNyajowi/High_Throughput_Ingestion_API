@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -173,6 +174,10 @@ func newApplication(ctx context.Context, cfg config.Config, logger *slog.Logger)
 				mux.HandleFunc("GET /v1/live/devices/{deviceId}", func(w http.ResponseWriter, r *http.Request) {
 					id := r.PathValue("deviceId")
 					d, err := fleetReader.Device(r.Context(), id)
+					if errors.Is(err, fleet.ErrDeviceNotFound) {
+						httpserver.WriteError(w, r, http.StatusNotFound, "not_found", "Device has no current live aggregate")
+						return
+					}
 					if err != nil {
 						httpserver.WriteError(w, r, http.StatusServiceUnavailable, "unavailable", "Live aggregates are unavailable")
 						return
@@ -187,7 +192,8 @@ func newApplication(ctx context.Context, cfg config.Config, logger *slog.Logger)
 						httpserver.WriteError(w, r, http.StatusBadRequest, "invalid_request", "Invalid history bounds")
 						return
 					}
-					events, err := history.Query(r.Context(), pool, r.PathValue("deviceId"), from, to, limit)
+					measurement := r.URL.Query().Get("measurement_type")
+					events, err := history.Query(r.Context(), pool, r.PathValue("deviceId"), from, to, limit, measurement)
 					if err != nil {
 						httpserver.WriteError(w, r, http.StatusBadRequest, "invalid_request", "Invalid history bounds")
 						return
