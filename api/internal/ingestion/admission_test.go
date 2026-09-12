@@ -67,6 +67,22 @@ func TestTelemetryAdmissionEndpointReturnsStable503WithoutPartialAdmission(t *te
 	}
 }
 
+func TestTelemetryAdmissionEndpointRejectsBackpressuredBatchBeforeQueue(t *testing.T) {
+	queue := &recordingAdmissionQueue{}
+	handler := httpserver.NewHandler(httpserver.Options{RegisterRoutes: func(mux *http.ServeMux) {
+		mux.Handle("POST /v1/telemetry/batches", NewTelemetryAdmissionEndpoint(queue, blockedAdmissionGuard{}))
+	}})
+	request := httptest.NewRequest(http.MethodPost, "/v1/telemetry/batches", nil)
+	request = request.WithContext(withValidatedBatch(request.Context(), testValidatedBatch("edge-01", 2)))
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusServiceUnavailable || len(queue.batches) != 0 || response.Header().Get("X-Request-ID") == "" {
+		t.Fatalf("backpressure result = status %d queue %#v headers %#v", response.Code, queue.batches, response.Header())
+	}
+}
+
 func TestTelemetryAdmissionRouteRejectsUnauthenticatedRequestBeforeQueue(t *testing.T) {
 	queue := &recordingAdmissionQueue{}
 	handler := httpserver.NewHandler(httpserver.Options{RegisterRoutes: func(mux *http.ServeMux) {
@@ -104,3 +120,7 @@ type unavailableAdmissionError struct{}
 func (unavailableAdmissionError) Error() string            { return "queue full" }
 func (unavailableAdmissionError) AdmissionStatusCode() int { return http.StatusServiceUnavailable }
 func (unavailableAdmissionError) AdmissionCode() string    { return "unavailable" }
+
+type blockedAdmissionGuard struct{}
+
+func (blockedAdmissionGuard) AllowsAdmission() bool { return false }

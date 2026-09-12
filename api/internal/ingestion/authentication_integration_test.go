@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/example/telemetry/api/internal/ingestion/credentials"
 	"github.com/example/telemetry/api/internal/platform/config"
@@ -41,9 +42,7 @@ func TestDeviceAuthenticatorUsesRealCredentialBinding(t *testing.T) {
 		t.Fatalf("connect PostgreSQL: %v", err)
 	}
 	t.Cleanup(pool.Close)
-	if err := pool.Ping(ctx); err != nil {
-		t.Fatalf("ping PostgreSQL: %v", err)
-	}
+	waitForPostgreSQL(t, ctx, pool)
 
 	const externalID = "edge-01"
 	pepper := strings.Repeat("p", 32)
@@ -106,6 +105,20 @@ func TestDeviceAuthenticatorUsesRealCredentialBinding(t *testing.T) {
 	}
 	if strings.Contains(disabledResponse.Body.String(), "disabled") || strings.Contains(disabledResponse.Body.String(), apiKey) {
 		t.Fatalf("disabled credential response leaks authorization detail: %s", disabledResponse.Body.String())
+	}
+}
+
+func waitForPostgreSQL(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		if err := pool.Ping(ctx); err == nil {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("PostgreSQL did not become ready within 30 seconds")
+		}
+		time.Sleep(250 * time.Millisecond)
 	}
 }
 

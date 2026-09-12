@@ -10,7 +10,6 @@ import (
 	"syscall"
 
 	"github.com/example/telemetry/api/internal/platform/config"
-	"github.com/example/telemetry/api/internal/platform/httpserver"
 	"github.com/example/telemetry/api/internal/platform/runtime"
 )
 
@@ -21,10 +20,16 @@ func main() {
 		logger.Error("invalid configuration", "error", err)
 		os.Exit(1)
 	}
-	readiness := httpserver.NewReadiness()
+	dependencyContext, dependencyCancel := context.WithTimeout(context.Background(), cfg.Dependencies.PostgresTimeout)
+	application, err := newApplication(dependencyContext, cfg, logger)
+	dependencyCancel()
+	if err != nil {
+		logger.Error("api dependencies are unavailable", "error", err)
+		return
+	}
 	server := &http.Server{
 		Addr:              cfg.ListenAddr,
-		Handler:           httpserver.NewHandler(httpserver.Options{Logger: logger, Readiness: readiness}),
+		Handler:           application.handler,
 		ReadHeaderTimeout: cfg.Server.ReadHeaderTimeout,
 		ReadTimeout:       cfg.Server.ReadTimeout,
 		WriteTimeout:      cfg.Server.WriteTimeout,
@@ -45,7 +50,8 @@ func main() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer cancel()
-	if err := runtime.New(server, readiness).Shutdown(ctx); err != nil {
+	application.pauseAdmission()
+	if err := runtime.New(server, application.readiness, application).Shutdown(ctx); err != nil {
 		logger.Error("graceful shutdown failed", "error", err)
 	}
 }

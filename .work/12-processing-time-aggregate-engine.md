@@ -2,7 +2,7 @@
 
 **Type:** logic (test-first)
 **Blocked by:** 08, 09 — ordered shard processing and accepted events are required.
-**Status:** planned
+**Status:** in-progress
 
 ## What this delivers
 
@@ -30,4 +30,3 @@ Workers maintain bounded processing-time five-minute aggregates and exact live t
 ## Verification
 
 - Write time-window and exact-boundary tests first; run race and memory-boundedness checks.
-

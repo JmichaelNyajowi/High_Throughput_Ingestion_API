@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/example/telemetry/api/internal/platform/config"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -38,9 +39,7 @@ func TestBootstrapPersistsOnlyHMACCredentialRecordsAgainstRealSchema(t *testing.
 		t.Fatalf("connect PostgreSQL: %v", err)
 	}
 	t.Cleanup(pool.Close)
-	if err := pool.Ping(ctx); err != nil {
-		t.Fatalf("ping PostgreSQL: %v", err)
-	}
+	waitForPostgreSQL(t, ctx, pool)
 
 	firstKey := testAPIKey("edge-01", 1)
 	seeded, err := Bootstrap(ctx, pool, strings.Repeat("p", 32), []config.DeviceSeed{{
@@ -132,6 +131,20 @@ func TestBootstrapPersistsOnlyHMACCredentialRecordsAgainstRealSchema(t *testing.
 	}
 	if replacementKeyID != parsedSecondKey.KeyID {
 		t.Fatalf("replacement key ID = %q, want %q", replacementKeyID, parsedSecondKey.KeyID)
+	}
+}
+
+func waitForPostgreSQL(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		if err := pool.Ping(ctx); err == nil {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("PostgreSQL did not become ready within 30 seconds")
+		}
+		time.Sleep(250 * time.Millisecond)
 	}
 }
 

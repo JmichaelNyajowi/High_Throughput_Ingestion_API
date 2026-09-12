@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -34,6 +35,9 @@ func TestBatcherFlushesAtSizeAndShutdownIsIdempotent(t *testing.T) {
 	if err := batcher.Shutdown(ctx); err != nil {
 		t.Fatal(err)
 	}
+	if batcher.Submit(testPersistenceBatch(1)) {
+		t.Fatal("submit after shutdown must be rejected")
+	}
 	if metrics := batcher.Metrics(); metrics.Flushes != 1 || metrics.LastFlush.Inserted != PersistenceFlushSize {
 		t.Fatalf("metrics=%#v", metrics)
 	}
@@ -63,6 +67,25 @@ func TestBatcherFlushesOnTimer(t *testing.T) {
 	}
 }
 
+func TestBatcherRecordsFailedFlushOutcome(t *testing.T) {
+	batcher, err := NewBatcher(failingRepository{}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !batcher.Submit(testPersistenceBatch(2)) {
+		t.Fatal("submit")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := batcher.Shutdown(ctx); err != nil {
+		t.Fatal(err)
+	}
+	metrics := batcher.Metrics()
+	if metrics.Flushes != 1 || metrics.Failures != 1 || metrics.LastFlush.Attempted != 2 || metrics.LastFlushDuration <= 0 {
+		t.Fatalf("metrics=%#v", metrics)
+	}
+}
+
 type recordingRepository struct {
 	mu      sync.Mutex
 	flushed chan int
@@ -80,4 +103,14 @@ func (r *recordingRepository) Flush(_ context.Context, batches []ingestion.Valid
 }
 func testPersistenceBatch(count int) ingestion.ValidatedBatch {
 	return ingestion.ValidatedBatch{Events: make([]ingestion.ValidatedEvent, count)}
+}
+
+type failingRepository struct{}
+
+func (failingRepository) Flush(_ context.Context, batches []ingestion.ValidatedBatch) (FlushOutcome, error) {
+	count := 0
+	for _, batch := range batches {
+		count += len(batch.Events)
+	}
+	return FlushOutcome{Attempted: count}, errors.New("database unavailable")
 }
