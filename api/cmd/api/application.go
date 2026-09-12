@@ -11,6 +11,8 @@ import (
 	"github.com/example/telemetry/api/internal/platform/httpserver"
 	"github.com/example/telemetry/api/internal/telemetry"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -28,6 +30,7 @@ type application struct {
 	aggregates *telemetry.AggregateEngine
 	redis      *redis.Client
 	publisher  *telemetry.RedisStatePublisher
+	rebuilder  *telemetry.RedisRebuilder
 }
 
 func newApplication(ctx context.Context, cfg config.Config, logger *slog.Logger) (*application, error) {
@@ -60,6 +63,13 @@ func newApplication(ctx context.Context, cfg config.Config, logger *slog.Logger)
 	}
 
 	repository := telemetry.NewPostgresEventRepository(pool)
+	rebuilder, err := telemetry.NewRedisRebuilder(telemetry.NewPostgresRebuildSource(pool), publisher)
+	if err != nil {
+		_ = publisher.Shutdown(context.Background())
+		_ = redisClient.Close()
+		pool.Close()
+		return nil, err
+	}
 	retry, err := telemetry.NewRetryBuffer(repository, telemetry.RetryConfig{})
 	if err != nil {
 		_ = publisher.Shutdown(context.Background())
@@ -94,6 +104,13 @@ func newApplication(ctx context.Context, cfg config.Config, logger *slog.Logger)
 	}
 
 	readiness := httpserver.NewReadiness()
+	registry := prometheus.NewRegistry()
+	registry.MustRegister(prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: "telemetry_queue_capacity", Help: "Configured admission queue capacity."}, func() float64 { return float64(queue.Metrics().Capacity) }))
+	registry.MustRegister(prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: "telemetry_queue_depth", Help: "Current admission queue depth."}, func() float64 { return float64(queue.Metrics().Depth) }))
+	registry.MustRegister(prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: "telemetry_workers", Help: "Fixed queue worker count."}, func() float64 { return float64(queue.Metrics().WorkerCount) }))
+	registry.MustRegister(prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: "telemetry_redis_errors_total", Help: "Redis publication errors."}, func() float64 { return float64(publisher.Metrics().Errors) }))
+	registry.MustRegister(prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: "telemetry_persistence_flushes_total", Help: "Persistence flushes."}, func() float64 { return float64(batcher.Metrics().Flushes) }))
+	registry.MustRegister(prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: "telemetry_retry_occupancy_events", Help: "Retry-buffer event occupancy."}, func() float64 { return float64(retry.Metrics().OccupancyEvents) }))
 	admissionRoute := ingestion.NewTelemetryAdmissionRoute(
 		ingestion.NewDeviceAuthenticator(pool, cfg.APIKeyPepper),
 		ingestion.NewBatchValidator(nil),
@@ -105,6 +122,25 @@ func newApplication(ctx context.Context, cfg config.Config, logger *slog.Logger)
 		handler: httpserver.NewHandler(httpserver.Options{
 			Logger:    logger,
 			Readiness: readiness,
+			Metrics:   promhttp.HandlerFor(registry, promhttp.HandlerOpts{}),
+			ReadinessCheck: func() (string, string, string, string) {
+				p := "ready"
+				c, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+				defer cancel()
+				if pool.Ping(c) != nil {
+					p = "unavailable"
+				}
+				a := "accepting"
+				s := "ready"
+				if !retry.AllowsAdmission() {
+					a = "backpressured"
+					s = "unavailable"
+				}
+				if p != "ready" {
+					s = "unavailable"
+				}
+				return a, p, string(publisher.Mode()), s
+			},
 			RegisterRoutes: func(mux *http.ServeMux) {
 				mux.Handle("POST /v1/telemetry/batches", admissionRoute)
 			},
@@ -117,6 +153,7 @@ func newApplication(ctx context.Context, cfg config.Config, logger *slog.Logger)
 		aggregates: aggregates,
 		redis:      redisClient,
 		publisher:  publisher,
+		rebuilder:  rebuilder,
 	}, nil
 }
 

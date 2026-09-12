@@ -18,7 +18,7 @@ func TestHealthEndpointsConformToPublishedContract(t *testing.T) {
 		body map[string]string
 	}{
 		{"/healthz", map[string]string{"status": "ok"}},
-		{"/readyz", map[string]string{"status": "ready", "admission": "accepting"}},
+		{"/readyz", map[string]string{"status": "ready", "admission": "accepting", "postgres": "unknown", "redis": "unknown"}},
 	} {
 		t.Run(endpoint.path, func(t *testing.T) {
 			request := httptest.NewRequest(http.MethodGet, endpoint.path, nil)

@@ -1,6 +1,7 @@
 package ingestion
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/example/telemetry/api/internal/platform/httpserver"
@@ -49,15 +50,18 @@ func NewTelemetryAdmissionRoute(authenticator DeviceAuthenticator, validator Bat
 func (endpoint telemetryAdmissionEndpoint) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	batch, found := ValidatedBatchFromContext(r.Context())
 	if !found || endpoint.queue == nil {
+		slog.Info("telemetry admission", "request_id", httpserver.RequestID(r.Context()), "outcome", "rejected", "reason", "unavailable")
 		httpserver.WriteError(w, r, http.StatusServiceUnavailable, "unavailable", "Service temporarily unavailable")
 		return
 	}
 	if endpoint.guard != nil && !endpoint.guard.AllowsAdmission() {
+		slog.Info("telemetry admission", "request_id", httpserver.RequestID(r.Context()), "device_id", batch.Device.ExternalID, "batch_size", len(batch.Events), "outcome", "rejected", "reason", "backpressure")
 		httpserver.WriteError(w, r, http.StatusServiceUnavailable, "unavailable", "Service temporarily unavailable")
 		return
 	}
 	batch.RequestID = httpserver.RequestID(r.Context())
 	if err := endpoint.queue.Admit(batch); err != nil {
+		slog.Info("telemetry admission", "request_id", batch.RequestID, "device_id", batch.Device.ExternalID, "batch_size", len(batch.Events), "outcome", "rejected", "reason", "queue")
 		if failure, ok := err.(admissionFailure); ok {
 			httpserver.WriteError(w, r, failure.AdmissionStatusCode(), failure.AdmissionCode(), "Service temporarily unavailable")
 			return
@@ -65,6 +69,7 @@ func (endpoint telemetryAdmissionEndpoint) ServeHTTP(w http.ResponseWriter, r *h
 		httpserver.WriteError(w, r, http.StatusServiceUnavailable, "unavailable", "Service temporarily unavailable")
 		return
 	}
+	slog.Info("telemetry admission", "request_id", batch.RequestID, "device_id", batch.Device.ExternalID, "batch_size", len(batch.Events), "outcome", "accepted")
 
 	httpserver.WriteJSON(w, http.StatusAccepted, admissionAccepted{
 		RequestID:      httpserver.RequestID(r.Context()),

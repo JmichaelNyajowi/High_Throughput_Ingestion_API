@@ -8,6 +8,7 @@ import (
 
 	"github.com/example/telemetry/api/internal/ingestion"
 	"github.com/example/telemetry/api/internal/ingestion/credentials"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const (
@@ -24,11 +25,34 @@ type RebuildEvent struct {
 }
 
 // RebuildSource supplies an explicitly bounded, received-time-ordered scan.
-// Its PostgreSQL implementation belongs to the persistence seam added with
-// the next integration tranche; this interface prevents live reads from ever
-// substituting an unbounded source query.
 type RebuildSource interface {
 	LoadForRebuild(context.Context, time.Time, time.Time, int) ([]RebuildEvent, error)
+}
+
+type PostgresRebuildSource struct{ pool *pgxpool.Pool }
+
+func NewPostgresRebuildSource(pool *pgxpool.Pool) PostgresRebuildSource {
+	return PostgresRebuildSource{pool: pool}
+}
+
+func (source PostgresRebuildSource) LoadForRebuild(ctx context.Context, from, to time.Time, limit int) ([]RebuildEvent, error) {
+	if source.pool == nil || limit < 1 || limit > maxRebuildEvents {
+		return nil, errors.New("bounded postgres rebuild source is required")
+	}
+	rows, err := source.pool.Query(ctx, `SELECT d.external_id, e.event_id, e.measurement_type, e.value, e.unit, e.event_timestamp, e.received_at FROM telemetry_events e JOIN devices d ON d.id=e.device_id WHERE e.received_at >= $1 AND e.received_at < $2 ORDER BY e.received_at, e.id LIMIT $3`, from, to, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []RebuildEvent
+	for rows.Next() {
+		var record RebuildEvent
+		if err := rows.Scan(&record.DeviceID, &record.Event.EventID, &record.Event.MeasurementType, &record.Event.Value, &record.Event.Unit, &record.Event.Timestamp, &record.ReceivedAt); err != nil {
+			return nil, err
+		}
+		result = append(result, record)
+	}
+	return result, rows.Err()
 }
 
 type RedisRebuilder struct {

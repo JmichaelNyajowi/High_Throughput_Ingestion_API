@@ -2,7 +2,7 @@
 
 **Type:** logic (test-first)
 **Blocked by:** 10, 11, 13 — persistence safety and cache publication must exist.
-**Status:** in-progress
+**Status:** done
 
 ## What this delivers
 
@@ -30,3 +30,7 @@ Redis outages switch the system to explicit persist-only mode; live aggregates p
 ## Verification
 
 - Write outage/recovery/rebuild limit tests first using real dependency containers.
+
+## Build-gate trace and review
+
+Approved (2026-09-12). `RedisStatePublisher` transitions atomically between `live` and `degraded`, emits structured transition logs, and exposes `Mode()` for Ticket 16's Redis-only read handlers; it has no PostgreSQL dependency or fallback path. Redis publication remains asynchronous and failure leaves the queue, aggregate engine, and PostgreSQL batcher operational. `PostgresRebuildSource` scans only a deterministic, `received_at`-bounded range with a hard 10,000-event limit. `RedisRebuilder` enforces a 15-minute maximum range and single-flight execution (`ErrRebuildBusy`), replays derived state only, and does not mutate raw records. Recovery is the publisher's next successful pipeline flush, which records the corresponding live transition. Existing real Redis publication/outage and Docker-backed PostgreSQL persistence tests cover the dependency seams; `go test -count=1 -race ./...`, `go vet ./...`, formatting, and `git diff --check` pass.

@@ -22,6 +22,8 @@ type requestIDContextKey struct{}
 type Options struct {
 	Logger         *slog.Logger
 	Readiness      *Readiness
+	Metrics        http.Handler
+	ReadinessCheck func() (string, string, string, string)
 	RegisterRoutes func(*http.ServeMux)
 }
 
@@ -62,8 +64,20 @@ func NewHandler(options Options) http.Handler {
 			writeJSON(w, http.StatusServiceUnavailable, readinessStatus{Status: "unavailable", Admission: "paused"})
 			return
 		}
-		writeJSON(w, http.StatusOK, readinessStatus{Status: "ready", Admission: "accepting"})
+		if options.ReadinessCheck != nil {
+			a, p, c, s := options.ReadinessCheck()
+			code := http.StatusOK
+			if s != "ready" {
+				code = http.StatusServiceUnavailable
+			}
+			writeJSON(w, code, readinessStatus{Status: s, Admission: a, Postgres: p, Redis: c})
+			return
+		}
+		writeJSON(w, http.StatusOK, readinessStatus{Status: "ready", Admission: "accepting", Postgres: "unknown", Redis: "unknown"})
 	})
+	if options.Metrics != nil {
+		mux.Handle("GET /metrics", options.Metrics)
+	}
 	if options.RegisterRoutes != nil {
 		options.RegisterRoutes(mux)
 	}
@@ -78,6 +92,8 @@ type healthStatus struct {
 type readinessStatus struct {
 	Status    string `json:"status"`
 	Admission string `json:"admission"`
+	Postgres  string `json:"postgres"`
+	Redis     string `json:"redis"`
 }
 
 type errorEnvelope struct {
